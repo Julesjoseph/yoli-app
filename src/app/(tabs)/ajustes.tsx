@@ -1,7 +1,9 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+
+import { Text } from '@/components/text';
 
 import { useAuth } from '@/auth/auth';
 import { Button, Card, Chips, Field, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle, type IconName } from '@/components/ui';

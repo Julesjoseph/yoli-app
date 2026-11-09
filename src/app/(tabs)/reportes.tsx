@@ -1,6 +1,8 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+
+import { Text } from '@/components/text';
 
 import { CHANNEL_ICONS } from '@/components/brand-icons';
 import { Card, Chips, EmptyState, HeroCard, Icon, IconBadge, Label, ProgressBar, Row, Screen, SectionTitle, Stat } from '@/components/ui';

@@ -1,4 +1,6 @@
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
+
+import { Text } from '@/components/text';
 
 import { useAuth } from '@/auth/auth';
 import { Logo } from '@/components/logo';

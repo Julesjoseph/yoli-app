@@ -1,7 +1,9 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+
+import { Text } from '@/components/text';
 
 import { foodIcon } from '@/components/brand-icons';
 import { CHANNEL_OPTIONS, OrderPanel } from '@/components/order-panel';

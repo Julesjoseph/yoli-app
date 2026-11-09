@@ -1,6 +1,8 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, View } from 'react-native';
+
+import { Text } from '@/components/text';
 
 import { EXPENSE_ICONS } from '@/components/brand-icons';
 import { Button, Card, Chips, EmptyState, Field, HeroCard, Icon, IconBadge, Label, Row, Screen, SectionTitle } from '@/components/ui';

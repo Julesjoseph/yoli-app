@@ -1,6 +1,8 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+
+import { Text } from '@/components/text';
 
 import { CHANNEL_ICONS } from '@/components/brand-icons';
 import { ProductImage } from '@/components/product-image';

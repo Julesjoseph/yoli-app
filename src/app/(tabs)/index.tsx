@@ -1,6 +1,8 @@
 import { router, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+
+import { Text } from '@/components/text';
 
 import { useAuth } from '@/auth/auth';
 import { CHANNEL_ICONS } from '@/components/brand-icons';
