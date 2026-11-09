@@ -6,11 +6,13 @@ import { CHANNEL_ICONS } from '@/components/brand-icons';
 import { ProductImage } from '@/components/product-image';
 import { Button, Card, Chips, Divider, EmptyState, Field, Icon, Label, Row } from '@/components/ui';
 import { ChannelColors } from '@/constants/theme';
+import { useAuth } from '@/auth/auth';
 import { recordSale, type PaymentMethod } from '@/db/repo';
 import { useBusiness } from '@/hooks/use-business';
 import { useCart } from '@/hooks/use-cart';
 import { useTheme } from '@/hooks/use-theme';
 import { CHANNEL_LABELS, DELIVERY_CHANNELS, formatRD, type Channel } from '@/lib/calc';
+import { getTicketSettings, printOrderTicket } from '@/printing/receipt';
 
 export const CHANNEL_OPTIONS = (Object.keys(CHANNEL_LABELS) as Channel[]).map((c) => ({
   value: c,
@@ -28,6 +30,7 @@ const PAYMENTS = [
 export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; compact?: boolean }) {
   const db = useSQLiteContext();
   const ctx = useBusiness();
+  const auth = useAuth();
   const cart = useCart();
   const t = useTheme();
   const [saving, setSaving] = useState(false);
@@ -36,15 +39,29 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
   async function charge() {
     setSaving(true);
     try {
-      const { totals } = await recordSale(db, ctx, {
+      const { order, totals } = await recordSale(db, ctx, {
         channel: cart.channel,
         lines: cart.lines,
         paymentMethod: isDelivery ? 'plataforma' : cart.payment,
         externalRef: cart.externalRef,
       });
       cart.clear();
-      Alert.alert('✅ Venta registrada', `Total ${formatRD(totals.total)}\nNeto para el negocio ${formatRD(totals.netIncome)}`);
       onCharged?.();
+      const shop = {
+        businessName: ctx.businessName,
+        locationName: ctx.locationName,
+        cashier: (auth.session?.user.user_metadata?.name as string | undefined) ?? undefined,
+      };
+      const print = () =>
+        printOrderTicket(db, order.id, shop).catch((e) => Alert.alert('No se pudo imprimir', e instanceof Error ? e.message : String(e)));
+      if ((await getTicketSettings(db)).autoPrint) {
+        print();
+      } else {
+        Alert.alert('✅ Venta registrada', `Total ${formatRD(totals.total)}\nNeto para el negocio ${formatRD(totals.netIncome)}`, [
+          { text: 'Listo', style: 'cancel' },
+          { text: 'Imprimir ticket', onPress: print },
+        ]);
+      }
     } catch (e) {
       Alert.alert('No se pudo guardar', String(e));
     } finally {

@@ -1,6 +1,6 @@
 import { router, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { useAuth } from '@/auth/auth';
 import { CHANNEL_ICONS } from '@/components/brand-icons';
@@ -10,6 +10,7 @@ import { getReport, listRecentOrders, listStock, pendingSyncCount, ROLE_LABELS }
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { CHANNEL_LABELS, formatRD } from '@/lib/calc';
+import { printOrderTicket, ticketNumber } from '@/printing/receipt';
 
 function greeting(d = new Date()) {
   const h = d.getHours();
@@ -124,7 +125,23 @@ export default function HomeScreen() {
       <Card style={{ gap: 0 }}>
         {data && data.recent.length === 0 ? <EmptyState icon="cart-outline" text="Aún no hay ventas. ¡Haz la primera desde la Caja!" /> : null}
         {(data?.recent ?? []).map((o, i) => (
-          <View key={o.id} style={[styles.order, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}>
+          <Pressable
+            key={o.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Reimprimir ticket de ${formatRD(o.total)}`}
+            onPress={() =>
+              Alert.alert(`Orden #${ticketNumber(o.id)}`, `${CHANNEL_LABELS[o.channel]} · ${formatRD(o.total)}`, [
+                { text: 'Cerrar', style: 'cancel' },
+                {
+                  text: 'Imprimir ticket',
+                  onPress: () =>
+                    printOrderTicket(db, o.id, { businessName: ctx.businessName, locationName: ctx.locationName }).catch((e) =>
+                      Alert.alert('No se pudo imprimir', e instanceof Error ? e.message : String(e)),
+                    ),
+                },
+              ])
+            }
+            style={[styles.order, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}>
             <IconBadge name={CHANNEL_ICONS[o.channel]} color={ChannelColors[o.channel]} size={38} />
             <View style={{ flex: 1 }}>
               <Label bold size={15}>{CHANNEL_LABELS[o.channel]}</Label>
@@ -133,7 +150,8 @@ export default function HomeScreen() {
               </Label>
             </View>
             <Label bold size={16}>{formatRD(o.total)}</Label>
-          </View>
+            <Icon name="printer-outline" size={18} color={t.textSecondary} />
+          </Pressable>
         ))}
       </Card>
     </Screen>

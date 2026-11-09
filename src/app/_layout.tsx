@@ -1,6 +1,8 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 import { AuthProvider } from '@/auth/auth';
 import { migrate } from '@/db/database';
@@ -37,6 +39,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <StatusBar style="dark" />
       <SQLiteProvider databaseName="yoli.db" onInit={migrate}>
         <AuthProvider>
           <BusinessProvider>

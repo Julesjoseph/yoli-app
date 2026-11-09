@@ -89,7 +89,10 @@ const DATA_TABLES = [
 /** Borra todo lo guardado en el equipo (al cambiar de negocio o salir del modo demo). */
 export async function resetLocalData(db: SQLiteDatabase) {
   await db.withTransactionAsync(async () => {
-    for (const t of DATA_TABLES) await db.runAsync(`DELETE FROM ${t}`);
+    for (const t of DATA_TABLES) {
+      // Los ajustes de la impresora son del equipo, no del negocio: se conservan.
+      await db.runAsync(t === 'app_settings' ? "DELETE FROM app_settings WHERE key NOT LIKE 'ticket_%'" : `DELETE FROM ${t}`);
+    }
   });
 }
 

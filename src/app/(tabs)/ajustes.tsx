@@ -49,6 +49,7 @@ export default function SettingsScreen() {
         ]
       : []),
     { icon: 'package-variant', label: 'Inventario', hint: 'Stock e insumos del local', onPress: () => router.push('/inventario') },
+    { icon: 'printer-pos', label: 'Impresora y ticket', hint: 'Datos del ticket y papel de 58 u 80 mm', onPress: () => router.push('/impresora') },
     { icon: 'receipt-text-check-outline', label: 'Orden actual', hint: 'Ver la orden de la caja', onPress: () => router.push('/orden') },
   ];
 
