@@ -1,9 +1,11 @@
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { foodIcon } from '@/components/brand-icons';
+import { ProductImage } from '@/components/product-image';
 import { Button, Card, Chips, Divider, Field, Icon, IconBadge, Label, Row, Screen, SectionTitle } from '@/components/ui';
 import {
   getProduct,
@@ -12,6 +14,7 @@ import {
   listCatalogIngredients,
   recipeCost,
   saveProduct,
+  uploadProductImage,
   type CatalogCategory,
   type CatalogIngredient,
 } from '@/db/catalog';
@@ -44,6 +47,10 @@ export default function ProductScreen() {
   const [adding, setAdding] = useState(false);
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  /** undefined = sin cambios; null = quitar foto; string = foto nueva. */
+  const [image, setImage] = useState<string | null | undefined>(undefined);
+  const [savedImage, setSavedImage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -58,6 +65,7 @@ export default function ProductScreen() {
           setCategory(p.category_id ?? '');
           setItbis(String(p.itbis_rate));
           setActive(!!p.active);
+          setSavedImage(p.image_url);
         }
         const r = await getRecipe(db, id);
         setRecipe(r.map((x) => ({ ingredient_id: x.ingredient_id, quantity: String(x.quantity) })));
@@ -74,6 +82,30 @@ export default function ProductScreen() {
   const margin = net > 0 ? Math.round(((net - cost) / net) * 100) : 0;
   const unused = ingredients.filter((i) => !recipe.some((r) => r.ingredient_id === i.id));
 
+  const shownImage = image === undefined ? savedImage : image;
+
+  async function pickImage(camera: boolean) {
+    const perm = camera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permiso necesario', camera ? 'Permite el uso de la cámara para tomar la foto.' : 'Permite el acceso a tus fotos.');
+      return;
+    }
+    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.6, base64: true };
+    const result = camera ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+    if (result.canceled || !result.assets[0]) return;
+    setUploading(true);
+    setMsg('');
+    try {
+      setImage(await uploadProductImage(ctx, result.assets[0]));
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function save() {
     setSaving(true);
     setMsg('');
@@ -81,7 +113,7 @@ export default function ProductScreen() {
       await saveProduct(
         db,
         ctx,
-        { id, name, price: priceN, category_id: category || null, itbis_rate: itbisN, active },
+        { id, name, price: priceN, category_id: category || null, itbis_rate: itbisN, active, image_url: image },
         recipe.map((r) => ({ ingredient_id: r.ingredient_id, quantity: num(r.quantity || '0') })),
       );
       router.back();
@@ -95,13 +127,27 @@ export default function ProductScreen() {
   return (
     <Screen back title={id ? 'Editar producto' : 'Nuevo producto'}>
       <Card style={{ gap: 14 }}>
-        <Row style={{ justifyContent: 'flex-start', gap: 12 }}>
-          <IconBadge name={foodIcon(name || 'producto')} color={t.primary} size={52} />
-          <View style={{ flex: 1 }}>
+        <Row style={{ justifyContent: 'flex-start', gap: 14 }}>
+          <ProductImage uri={shownImage} name={name || 'producto'} size={96} radius={22} />
+          <View style={{ flex: 1, gap: 4 }}>
             <Label bold size={18} numberOfLines={2}>{name || 'Producto sin nombre'}</Label>
             <Label color={t.primary} bold size={16}>{formatRD(priceN || 0)}</Label>
           </View>
         </Row>
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          <Button
+            variant="secondary"
+            icon="image-outline"
+            title={uploading ? 'Subiendo…' : shownImage ? 'Cambiar foto' : 'Elegir foto'}
+            onPress={() => pickImage(false)}
+            disabled={uploading}
+            style={{ flex: 1 }}
+          />
+          <Button variant="secondary" icon="camera-outline" title="Cámara" onPress={() => pickImage(true)} disabled={uploading} />
+          {shownImage ? (
+            <Button variant="ghost" icon="delete-outline" title="Quitar" onPress={() => setImage(null)} disabled={uploading} />
+          ) : null}
+        </View>
         <Field label="Nombre" icon="food" value={name} onChangeText={setName} placeholder="Ej. Chimichurri especial" />
         <Field label="Precio de venta (RD$, con ITBIS)" icon="cash" keyboardType="decimal-pad" value={price} onChangeText={setPrice} placeholder="0.00" />
         <Label muted size={13}>Impuesto</Label>
@@ -178,7 +224,7 @@ export default function ProductScreen() {
       </Card>
 
       {msg ? <Label color={t.danger} size={14}>{msg}</Label> : null}
-      <Button size="lg" icon="content-save" title={saving ? 'Guardando…' : 'Guardar producto'} onPress={save} disabled={saving || !name.trim() || !price} />
+      <Button size="lg" icon="content-save" title={saving ? 'Guardando…' : 'Guardar producto'} onPress={save} disabled={saving || uploading || !name.trim() || !price} />
     </Screen>
   );
 }

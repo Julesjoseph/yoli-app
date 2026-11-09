@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { foodIcon } from '@/components/brand-icons';
+import { ProductImage } from '@/components/product-image';
 import { Button, Card, Chips, EmptyState, Field, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle } from '@/components/ui';
 import {
   listCatalogCategories,
@@ -117,7 +118,7 @@ export default function CatalogScreen() {
                         accessibilityLabel={`Editar ${p.name}`}
                         onPress={() => router.push({ pathname: '/catalogo/producto', params: { id: p.id } })}
                         style={[styles.item, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }, !p.active && { opacity: 0.5 }]}>
-                        <IconBadge name={foodIcon(p.name + ' ' + c.name)} color={t.primary} size={40} />
+                        <ProductImage uri={p.image_url} name={p.name + ' ' + c.name} size={48} radius={14} />
                         <View style={{ flex: 1, gap: 2 }}>
                           <Label bold size={15} numberOfLines={2}>{p.name}</Label>
                           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>

@@ -4,12 +4,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/auth';
-import { Button, Card, Chips, Field, HeroCard, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle } from '@/components/ui';
+import { Button, Card, Chips, Field, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle, type IconName } from '@/components/ui';
+import { Mamey } from '@/constants/theme';
 import { getCommissionRates, pendingSyncCount, ROLE_LABELS, type Role } from '@/db/repo';
 import { canManage, useBusiness, useBusinessState, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/sync/supabase';
 import { pushOutbox } from '@/sync/sync';
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || 'Y';
+}
 
 interface Member {
   id: string;
@@ -33,6 +38,20 @@ export default function SettingsScreen() {
   const [pending, reloadPending] = useFocusData(() => pendingSyncCount(db), [db]);
   const [syncMsg, setSyncMsg] = useState('');
 
+  const userName = (auth.session?.user.user_metadata?.name as string | undefined) ?? '';
+  const menu: { icon: IconName; label: string; hint: string; onPress: () => void }[] = [
+    { icon: 'storefront-outline', label: ctx.businessName, hint: ctx.demo ? `Local: ${ctx.locationName}` : `${ctx.locationName} · toca para cambiar de local`, onPress: () => { if (!ctx.demo) changeLocation(); } },
+    ...(manager
+      ? [
+          { icon: 'book-open-variant' as const, label: 'Catálogo', hint: 'Productos, fotos, precios y recetas', onPress: () => router.push('/catalogo') },
+          { icon: 'receipt-text-outline' as const, label: 'Gastos', hint: 'Compras, nómina y servicios', onPress: () => router.push('/gastos') },
+          { icon: 'chart-box-outline' as const, label: 'Reportes', hint: 'Ventas, costos y ganancia', onPress: () => router.push('/reportes') },
+        ]
+      : []),
+    { icon: 'package-variant', label: 'Inventario', hint: 'Stock e insumos del local', onPress: () => router.push('/inventario') },
+    { icon: 'receipt-text-check-outline', label: 'Orden actual', hint: 'Ver la orden de la caja', onPress: () => router.push('/orden') },
+  ];
+
   async function sync() {
     const r = await pushOutbox(db);
     setSyncMsg(
@@ -47,26 +66,37 @@ export default function SettingsScreen() {
   }
 
   return (
-    <Screen title="Ajustes">
-      <HeroCard>
-        <Row>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-            <View style={{ width: 52, height: 52, borderRadius: 18, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="storefront-outline" size={28} color="#E11D48" />
+    <Screen title="Perfil">
+      <View style={{ alignItems: 'center', gap: 6, paddingVertical: 4 }}>
+        <View style={[styles.avatar, { backgroundColor: Mamey }]}>
+          <Text style={styles.avatarText}>{initials(userName || ctx.businessName)}</Text>
+        </View>
+        <Label bold size={20} numberOfLines={1}>{userName || ctx.businessName}</Label>
+        {!ctx.demo && auth.session?.user.email ? <Label muted size={14}>{auth.session.user.email}</Label> : null}
+        <View style={{ flexDirection: 'row', gap: 6, marginTop: 2 }}>
+          <Pill text={ROLE_LABELS[ctx.role].toUpperCase()} color={t.primary} />
+          {ctx.demo ? <Pill text="DEMO" color={t.info} /> : null}
+        </View>
+      </View>
+
+      <Card style={{ gap: 0, paddingVertical: 6 }}>
+        {menu.map((item, i) => (
+          <Pressable
+            key={item.label}
+            accessibilityRole="button"
+            onPress={item.onPress}
+            style={[styles.menuRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}>
+            <View style={[styles.menuIcon, { backgroundColor: t.primarySoft }]}>
+              <Icon name={item.icon} size={20} color={t.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '900' }} numberOfLines={1}>{ctx.businessName}</Text>
-              <Text style={{ color: '#FFFFFFE6', fontWeight: '600' }} numberOfLines={1}>
-                {ROLE_LABELS[ctx.role]} · {ctx.locationName}
-              </Text>
+              <Label bold size={16}>{item.label}</Label>
+              <Label muted size={13} numberOfLines={1}>{item.hint}</Label>
             </View>
-          </View>
-        </Row>
-        {!ctx.demo ? (
-          <Text style={{ color: '#FFFFFFCC', fontSize: 13 }} numberOfLines={1}>{auth.session?.user.email}</Text>
-        ) : null}
-      </HeroCard>
-      {!ctx.demo ? <Button icon="swap-horizontal" title="Cambiar de local" variant="secondary" onPress={changeLocation} /> : null}
+            <Icon name="chevron-right" color={t.textSecondary} />
+          </Pressable>
+        ))}
+      </Card>
 
       <Card>
         <Row>
@@ -97,27 +127,6 @@ export default function SettingsScreen() {
         </Card>
       ) : null}
 
-      {manager ? (
-        <Card style={{ gap: 0, paddingVertical: 6 }}>
-          {[
-            { icon: 'book-open-variant' as const, label: 'Catálogo', hint: 'Productos, precios, insumos y recetas', href: '/catalogo' as const, color: t.info },
-            { icon: 'receipt-text-outline' as const, label: 'Gastos', hint: 'Compras, nómina y servicios', href: '/gastos' as const, color: t.accent },
-          ].map((item, i) => (
-            <Pressable
-              key={item.label}
-              accessibilityRole="button"
-              onPress={() => router.push(item.href)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderColor: t.border }}>
-              <IconBadge name={item.icon} color={item.color} />
-              <View style={{ flex: 1 }}>
-                <Label bold size={16}>{item.label}</Label>
-                <Label muted size={13}>{item.hint}</Label>
-              </View>
-              <Icon name="chevron-right" color={t.textSecondary} />
-            </Pressable>
-          ))}
-        </Card>
-      ) : null}
       {manager ? <Commissions /> : null}
       {manager && !ctx.demo ? <Locations /> : null}
       {manager && !ctx.demo ? <Staff /> : null}
@@ -327,3 +336,10 @@ function Staff() {
     </Card>
   );
 }
+
+const styles = StyleSheet.create({
+  avatar: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  avatarText: { color: '#FFFFFF', fontSize: 32, fontWeight: '900' },
+  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
+  menuIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+});

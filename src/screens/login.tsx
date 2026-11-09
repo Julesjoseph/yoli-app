@@ -1,11 +1,11 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth';
+import { Logo } from '@/components/logo';
 import { Button, Card, Chips, Field, Icon, Label } from '@/components/ui';
-import { BrandGradient } from '@/constants/theme';
+import { Mamey } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 const FEATURES = [
@@ -36,13 +36,10 @@ export function LoginScreen() {
     <View style={{ flex: 1, backgroundColor: t.background }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <LinearGradient colors={BrandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+          <View style={[styles.hero, { backgroundColor: Mamey }]}>
             <SafeAreaView edges={['top']} style={{ gap: 18 }}>
-              <View style={styles.logo}>
-                <Icon name="food" size={34} color="#E11D48" />
-              </View>
-              <View style={{ gap: 6 }}>
-                <Text style={styles.brand}>YOLI APP</Text>
+              <View style={{ gap: 10, alignItems: 'center' }}>
+                <Logo size={54} color="#FFFFFF" />
                 <Text style={styles.tagline}>Ventas, inventario y ganancias de tu negocio, en un solo lugar.</Text>
               </View>
               <View style={styles.features}>
@@ -54,7 +51,7 @@ export function LoginScreen() {
                 ))}
               </View>
             </SafeAreaView>
-          </LinearGradient>
+          </View>
 
           <View style={styles.formWrap}>
             <Card style={{ gap: 14, padding: 20 }}>
@@ -119,11 +116,9 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: { paddingHorizontal: 24, paddingBottom: 56, paddingTop: 16, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
-  logo: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  brand: { color: '#FFFFFF', fontSize: 36, fontWeight: '900', letterSpacing: -1 },
-  tagline: { color: '#FFFFFFE6', fontSize: 17, fontWeight: '500', lineHeight: 23 },
-  features: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  hero: { paddingHorizontal: 24, paddingBottom: 64, paddingTop: 28, borderBottomLeftRadius: 40, borderBottomRightRadius: 40 },
+  tagline: { color: '#FFFFFFE6', fontSize: 17, fontWeight: '500', lineHeight: 23, textAlign: 'center' },
+  features: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   feature: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF2E', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   featureText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   formWrap: { marginTop: -36, paddingHorizontal: 16, paddingBottom: 40, gap: 14, width: '100%', maxWidth: 520, alignSelf: 'center' },

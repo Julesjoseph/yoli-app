@@ -51,7 +51,11 @@ export const Colors = {
 } as const;
 
 /** Degradado de marca para botones y portadas */
-export const BrandGradient = ['#F97316', '#E11D48'] as const;
+export const BrandGradient = ['#FB923C', '#EA580C'] as const;
+
+/** Color mamey sólido de la marca (fondos de portada, barra inferior). */
+export const Mamey = '#F26B1D';
+export const MameyDeep = '#C2410C';
 
 /** Color de cada canal de venta (igual en claro y oscuro) */
 export const ChannelColors = {

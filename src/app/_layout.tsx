@@ -5,6 +5,7 @@ import { useColorScheme } from 'react-native';
 import { AuthProvider } from '@/auth/auth';
 import { migrate } from '@/db/database';
 import { BusinessProvider, useBusinessState } from '@/hooks/use-business';
+import { CartProvider } from '@/hooks/use-cart';
 import { ChooseLocationScreen } from '@/screens/choose-location';
 import { CreateBusinessScreen } from '@/screens/create-business';
 import { LoginScreen } from '@/screens/login';
@@ -24,7 +25,11 @@ function Gate() {
     case 'error':
       return <ErrorScreen message={phase.message} />;
     case 'ready':
-      return <Stack screenOptions={{ headerShown: false }} />;
+      return (
+        <CartProvider>
+          <Stack screenOptions={{ headerShown: false }} />
+        </CartProvider>
+      );
   }
 }
 

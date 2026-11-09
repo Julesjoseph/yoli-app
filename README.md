@@ -5,9 +5,8 @@ App móvil (Android, iPhone y tablet) para manejar un negocio de comida rápida,
 ## Qué hace esta primera versión
 
 - **Inicio:** panel con ventas y ganancia del día, accesos rápidos, alertas de stock y últimas ventas.
-- **Catálogo:** crear y editar productos, precios, ITBIS, categorías, insumos y recetas (con costo y margen). Botón para cargar un menú de ejemplo.
-
-- **Caja (POS):** menú por categorías, órdenes de comedor, para llevar, PedidosYa y Uber Eats. Calcula ITBIS 18% (incluido en el precio) y el 10% de ley de propina en comedor. En tablet muestra el menú y la orden lado a lado.
+- **Catálogo:** crear y editar productos con foto (galería o cámara), precios, ITBIS, categorías, insumos y recetas (con costo y margen). Botón para cargar un menú de ejemplo.
+- **Caja (POS):** menú con tarjetas de productos con foto, detalle de cada producto con sus ingredientes, y una pantalla de orden tipo carrito. Menú por categorías, órdenes de comedor, para llevar, PedidosYa y Uber Eats. Calcula ITBIS 18% (incluido en el precio) y el 10% de ley de propina en comedor. En tablet muestra el menú y la orden lado a lado.
 - **PedidosYa y Uber Eats:** cada pedido guarda su número y descuenta la comisión de la plataforma (25% y 30% de ejemplo, configurables) para ver el ingreso real.
 - **Inventario:** insumos con stock mínimo y recetas. Cada venta descuenta los ingredientes automáticamente. Entradas por compra, mermas y ajustes.
 - **Gastos:** por categoría, con NCF del proveedor (útil para el reporte 606).
@@ -35,13 +34,13 @@ La app ya apunta al proyecto de Supabase del negocio (`src/sync/config.ts`). Par
 ## Conectar la nube (Supabase)
 
 1. Crea un proyecto gratis en https://supabase.com
-2. En *SQL Editor*, ejecuta en orden los archivos de `supabase/migrations/` (`0001_…` y luego `0002_…`).
+2. En *SQL Editor*, ejecuta en orden los archivos de `supabase/migrations/` (`0001_…`, `0002_…` y `0003_…` para las fotos de productos).
 3. Pon la URL y la clave *publishable* del proyecto en `src/sync/config.ts` (Project Settings > API Keys). Nunca la clave *secret*.
 4. Abre la app, toca **Crear cuenta**, y luego **Crear negocio**. Quedas como dueño.
 
 ### Personal y roles
 
-Cada empleado crea su cuenta en la app con su correo. Luego el dueño o un gerente lo agrega en **Ajustes > Personal**, eligiendo su rol y su local (o todos los locales).
+Cada empleado crea su cuenta en la app con su correo. Luego el dueño o un gerente lo agrega en **Perfil > Personal**, eligiendo su rol y su local (o todos los locales).
 
 | Rol | Puede |
 | --- | --- |

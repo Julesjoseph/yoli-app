@@ -16,6 +16,7 @@ export interface Product {
   name: string;
   price: number;
   itbis_rate: number;
+  image_url: string | null;
 }
 export interface Category {
   id: string;
@@ -94,7 +95,7 @@ export const listCategories = (db: SQLiteDatabase) =>
 
 export const listProducts = (db: SQLiteDatabase) =>
   db.getAllAsync<Product>(
-    'SELECT id, category_id, name, price, itbis_rate FROM products WHERE active = 1 ORDER BY name',
+    'SELECT id, category_id, name, price, itbis_rate, image_url FROM products WHERE active = 1 ORDER BY name',
   );
 
 export async function getCommissionRates(db: SQLiteDatabase, businessId: string) {

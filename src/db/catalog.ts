@@ -19,6 +19,7 @@ export interface CatalogProduct {
   category_id: string | null;
   itbis_rate: number;
   active: number;
+  image_url: string | null;
 }
 export interface CatalogCategory {
   id: string;
@@ -39,7 +40,7 @@ export interface RecipeLine {
 
 export const listCatalogProducts = (db: SQLiteDatabase) =>
   db.getAllAsync<CatalogProduct>(
-    'SELECT id, name, price, category_id, itbis_rate, active FROM products ORDER BY active DESC, name',
+    'SELECT id, name, price, category_id, itbis_rate, active, image_url FROM products ORDER BY active DESC, name',
   );
 export const listCatalogCategories = (db: SQLiteDatabase) =>
   db.getAllAsync<CatalogCategory>('SELECT id, name, sort_order FROM categories ORDER BY sort_order, name');
@@ -50,7 +51,7 @@ export const getRecipe = (db: SQLiteDatabase, productId: string) =>
 
 export async function getProduct(db: SQLiteDatabase, id: string) {
   return db.getFirstAsync<CatalogProduct>(
-    'SELECT id, name, price, category_id, itbis_rate, active FROM products WHERE id = ?',
+    'SELECT id, name, price, category_id, itbis_rate, active, image_url FROM products WHERE id = ?',
     [id],
   );
 }
@@ -127,7 +128,15 @@ export async function saveIngredient(
 export async function saveProduct(
   db: SQLiteDatabase,
   ctx: Context,
-  input: { id?: string; name: string; price: number; category_id: string | null; itbis_rate: number; active: boolean },
+  input: {
+    id?: string;
+    name: string;
+    price: number;
+    category_id: string | null;
+    itbis_rate: number;
+    active: boolean;
+    image_url?: string | null;
+  },
   recipe: RecipeLine[],
 ) {
   const row = {
@@ -138,6 +147,8 @@ export async function saveProduct(
     price: input.price,
     itbis_rate: input.itbis_rate,
     active: input.active,
+    // Solo se envía si se cambió, así funciona aunque la nube aún no tenga la columna de fotos.
+    ...(input.image_url !== undefined ? { image_url: input.image_url } : {}),
   };
   if (!row.name) throw new Error('Escribe el nombre del producto.');
   if (!Number.isFinite(row.price) || row.price <= 0) throw new Error('Escribe un precio válido.');
@@ -152,9 +163,11 @@ export async function saveProduct(
   }
 
   await db.withTransactionAsync(async () => {
+    const previous = await db.getFirstAsync<{ image_url: string | null }>('SELECT image_url FROM products WHERE id = ?', [row.id]);
+    const image = input.image_url !== undefined ? input.image_url : (previous?.image_url ?? null);
     await db.runAsync(
-      'INSERT OR REPLACE INTO products (id, business_id, category_id, name, price, itbis_rate, active) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [row.id, row.business_id, row.category_id, row.name, row.price, row.itbis_rate, row.active ? 1 : 0],
+      'INSERT OR REPLACE INTO products (id, business_id, category_id, name, price, itbis_rate, active, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [row.id, row.business_id, row.category_id, row.name, row.price, row.itbis_rate, row.active ? 1 : 0, image],
     );
     await db.runAsync('DELETE FROM recipe_items WHERE product_id = ?', [row.id]);
     for (const l of lines) {
@@ -164,6 +177,30 @@ export async function saveProduct(
     }
   });
   return row.id;
+}
+
+/**
+ * Sube la foto de un producto y devuelve su dirección pública.
+ * En modo demo se usa la foto guardada en el teléfono.
+ */
+export async function uploadProductImage(ctx: Context, image: { uri: string; base64?: string | null }) {
+  if (ctx.demo || !supabase) return image.uri;
+  if (!image.base64) throw new Error('No se pudo leer la foto.');
+  const bytes = Uint8Array.from(atob(image.base64), (c) => c.charCodeAt(0));
+  const path = `${ctx.businessId}/${randomUUID()}.jpg`;
+  let error: { message: string } | null = null;
+  try {
+    ({ error } = await supabase.storage.from('productos').upload(path, bytes, { contentType: 'image/jpeg' }));
+  } catch (e) {
+    throw new Error(friendly(String(e)));
+  }
+  if (error) {
+    if (/bucket not found/i.test(error.message)) {
+      throw new Error('Falta activar las fotos en Supabase (archivo 0003_fotos_productos.sql).');
+    }
+    throw new Error(friendly(error.message));
+  }
+  return supabase.storage.from('productos').getPublicUrl(path).data.publicUrl;
 }
 
 /** Menú típico dominicano de ejemplo para arrancar rápido. */

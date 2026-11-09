@@ -8,12 +8,17 @@ import { loadSampleCatalog } from './catalog';
  * Las columnas tienen los mismos nombres que en Supabase para que la
  * sincronización envíe las filas tal cual.
  */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export async function migrate(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const current = row?.user_version ?? 0;
   if (current >= SCHEMA_VERSION) return;
+  if (current === 1) {
+    // v2: foto de producto
+    await db.execAsync(`ALTER TABLE products ADD COLUMN image_url TEXT; PRAGMA user_version = 2;`);
+    return;
+  }
 
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -30,7 +35,8 @@ export async function migrate(db: SQLiteDatabase) {
     );
     CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY, business_id TEXT NOT NULL, category_id TEXT, name TEXT NOT NULL,
-      price REAL NOT NULL, itbis_rate REAL NOT NULL DEFAULT 0.18, active INTEGER NOT NULL DEFAULT 1
+      price REAL NOT NULL, itbis_rate REAL NOT NULL DEFAULT 0.18, active INTEGER NOT NULL DEFAULT 1,
+      image_url TEXT
     );
     CREATE TABLE IF NOT EXISTS ingredients (
       id TEXT PRIMARY KEY, business_id TEXT NOT NULL, name TEXT NOT NULL, unit TEXT NOT NULL,

@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Logo } from '@/components/logo';
 import { BrandGradient } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -47,7 +48,10 @@ export function Screen({
   right,
   footer,
   back,
+  brand,
 }: {
+  /** Encabezado de marca: logo centrado con botones a los lados. */
+  brand?: { left?: ReactNode; right?: ReactNode };
   /** Muestra una flecha para volver (pantallas que no son pestañas). */
   back?: boolean;
   title: string;
@@ -68,7 +72,14 @@ export function Screen({
   );
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: t.background }}>
-      <View style={styles.header}>
+      {brand ? (
+        <View style={styles.brandHeader}>
+          <View style={styles.brandSide}>{brand.left}</View>
+          <Logo size={30} color={t.primary} />
+          <View style={[styles.brandSide, { alignItems: 'flex-end' }]}>{brand.right}</View>
+        </View>
+      ) : null}
+      <View style={[styles.header, brand && !title && { display: 'none' }]}>
         {back ? (
           <Pressable
             accessibilityRole="button"
@@ -154,6 +165,26 @@ export function Label({
       ]}>
       {children}
     </Text>
+  );
+}
+
+/** Botón redondo con ícono (encabezados). Con `badge` muestra un contador. */
+export function IconButton({ icon, onPress, label, badge }: { icon: IconName; onPress: () => void; label: string; badge?: number }) {
+  const t = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [styles.iconBtn, { backgroundColor: t.backgroundElement, borderColor: t.border, opacity: pressed ? 0.7 : 1 }]}>
+      <Icon name={icon} size={22} />
+      {badge ? (
+        <View style={[styles.iconBadge, { backgroundColor: t.primary }]}>
+          <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '900' }}>{badge}</Text>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -390,9 +421,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: { fontSize: 30, fontWeight: '800', letterSpacing: -0.8 },
+  iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth },
+  iconBadge: { position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
   back: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth },
   subtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  content: { padding: 16, gap: 14, paddingBottom: 56 },
+  content: { padding: 16, gap: 14, paddingBottom: 130 },
+  brandHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 6 },
+  brandSide: { width: 96 },
   card: { borderRadius: 20, padding: 16, gap: 10, borderWidth: StyleSheet.hairlineWidth },
   hero: { borderRadius: 24, padding: 20, gap: 8 },
   button: { borderRadius: 14, overflow: 'hidden' },
