@@ -1,0 +1,17 @@
+# Publicar la versión para PC (navegador) en Netlify.
+[build]
+  command = "npx expo export --platform web"
+  publish = "dist"
+
+# SQLite en el navegador necesita estos encabezados.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Opener-Policy = "same-origin"
+
+# Todas las rutas abren la app.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

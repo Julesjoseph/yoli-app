@@ -4,6 +4,7 @@ App móvil (Android, iPhone y tablet) para manejar un negocio de comida rápida,
 
 ## Qué hace esta primera versión
 
+- **Panel de administración:** (dueño y gerente) ventas, ticket promedio, gastos, ganancia, ventas por hora o día, por canal y por local, más vendidos, stock bajo y últimas ventas. Con internet muestra todos los locales desde la nube y se actualiza cada minuto.
 - **Inicio:** panel con ventas y ganancia del día, accesos rápidos, alertas de stock y últimas ventas.
 - **Catálogo:** crear y editar productos con foto (galería o cámara), precios, ITBIS, categorías, insumos y recetas (con costo y margen). Botón para cargar un menú de ejemplo.
 - **Caja (POS):** menú con tarjetas de productos con foto, detalle de cada producto con sus ingredientes, y una pantalla de orden tipo carrito. Menú por categorías, órdenes de comedor, para llevar, PedidosYa y Uber Eats. Calcula ITBIS 18% (incluido en el precio) y el 10% de ley de propina en comedor. En tablet muestra el menú y la orden lado a lado.
@@ -31,6 +32,18 @@ npx expo start
 Escanea el código QR con la app **Expo Go** en tu teléfono o tablet. La primera vez se cargan productos e insumos de ejemplo.
 
 La app ya apunta al proyecto de Supabase del negocio (`src/sync/config.ts`). Para probar en **modo demo** (un local con datos de ejemplo, sin inicio de sesión), crea un `.env` con `EXPO_PUBLIC_SUPABASE_URL=` vacío.
+
+## Usarla desde la PC
+
+En la PC, dentro de la carpeta de la app:
+
+```bash
+npm run pc
+```
+
+Se abre en el navegador (http://localhost:8081) con menú lateral. Entra con el mismo correo: las ventas de los teléfonos y de la PC se juntan en la nube.
+
+Para tener una dirección fija en internet (sin dejar la PC con PowerShell abierto), se puede publicar en Netlify: el archivo `netlify.toml` ya trae la configuración (`npm run build:web` genera la carpeta `dist`).
 
 ## Conectar la nube (Supabase)
 

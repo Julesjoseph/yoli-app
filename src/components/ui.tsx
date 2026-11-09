@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
   iconBadge: { position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
   back: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth },
   subtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  content: { padding: 16, gap: 14, paddingBottom: 130 },
+  content: { padding: 16, gap: 14, paddingBottom: 130, width: '100%', maxWidth: 1280, alignSelf: 'center' },
   brandHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 6 },
   brandSide: { width: 96 },
   card: { borderRadius: 20, padding: 16, gap: 10, borderWidth: StyleSheet.hairlineWidth },
