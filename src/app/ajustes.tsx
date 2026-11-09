@@ -1,9 +1,9 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/auth';
-import { Button, Card, Chips, Field, Label, Row, Screen } from '@/components/ui';
+import { Button, Card, Chips, Field, HeroCard, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle } from '@/components/ui';
 import { getCommissionRates, pendingSyncCount, ROLE_LABELS, type Role } from '@/db/repo';
 import { canManage, useBusiness, useBusinessState, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
@@ -47,23 +47,48 @@ export default function SettingsScreen() {
 
   return (
     <Screen title="Ajustes">
-      <Card>
-        <Label bold size={18}>{ctx.businessName}</Label>
-        <Row><Label muted>Local</Label><Label>{ctx.locationName}</Label></Row>
-        <Row><Label muted>Tu rol</Label><Label>{ROLE_LABELS[ctx.role]}</Label></Row>
-        {!ctx.demo ? <Row><Label muted>Cuenta</Label><Label size={14}>{auth.session?.user.email}</Label></Row> : null}
-        {!ctx.demo ? <Button title="Cambiar de local" variant="secondary" onPress={changeLocation} /> : null}
-      </Card>
+      <HeroCard>
+        <Row>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+            <View style={{ width: 52, height: 52, borderRadius: 18, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="storefront-outline" size={28} color="#E11D48" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '900' }} numberOfLines={1}>{ctx.businessName}</Text>
+              <Text style={{ color: '#FFFFFFE6', fontWeight: '600' }} numberOfLines={1}>
+                {ROLE_LABELS[ctx.role]} · {ctx.locationName}
+              </Text>
+            </View>
+          </View>
+        </Row>
+        {!ctx.demo ? (
+          <Text style={{ color: '#FFFFFFCC', fontSize: 13 }} numberOfLines={1}>{auth.session?.user.email}</Text>
+        ) : null}
+      </HeroCard>
+      {!ctx.demo ? <Button icon="swap-horizontal" title="Cambiar de local" variant="secondary" onPress={changeLocation} /> : null}
 
       <Card>
-        <Row><Label muted>Cambios pendientes de subir</Label><Label bold>{pending ?? 0}</Label></Row>
-        <Button title="Sincronizar ahora" variant="secondary" onPress={sync} />
-        {syncMsg ? <Label muted size={14}>{syncMsg}</Label> : null}
+        <Row>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+            <IconBadge name={ctx.demo ? 'cellphone' : pending ? 'cloud-sync' : 'cloud-check'} color={ctx.demo ? t.info : pending ? t.accent : t.success} />
+            <View style={{ flex: 1 }}>
+              <Label bold size={16}>Respaldo en la nube</Label>
+              <Label muted size={13}>
+                {ctx.demo ? 'Guardado solo en este equipo' : pending ? `${pending} cambios por subir` : 'Todo está al día'}
+              </Label>
+            </View>
+          </View>
+          <Button size="sm" icon="sync" title="Sincronizar" variant="secondary" onPress={sync} />
+        </Row>
+        {syncMsg ? <Label muted size={13}>{syncMsg}</Label> : null}
       </Card>
 
       {ctx.demo ? (
         <Card>
-          <Label bold>Modo demo</Label>
+          <Row>
+            <Label bold>Modo demo</Label>
+            <Pill text="DEMO" color={t.info} />
+          </Row>
           <Label muted size={14}>
             La app está usando datos de ejemplo guardados solo en este equipo. Para usar varios locales, personal e
             inicio de sesión, conecta Supabase (ver README).
@@ -77,6 +102,7 @@ export default function SettingsScreen() {
 
       {!ctx.demo ? (
         <Button
+          icon="logout"
           title="Cerrar sesión"
           variant="danger"
           onPress={async () => {
@@ -135,11 +161,11 @@ function Commissions() {
 
   return (
     <Card>
-      <Label bold size={18}>Comisiones de delivery</Label>
-      <Field label="PedidosYa (%)" keyboardType="decimal-pad" value={pya} onChangeText={setPya} />
-      <Field label="Uber Eats (%)" keyboardType="decimal-pad" value={uber} onChangeText={setUber} />
+      <SectionTitle icon="percent-outline">Comisiones de delivery</SectionTitle>
+      <Field label="PedidosYa (%)" icon="moped" keyboardType="decimal-pad" value={pya} onChangeText={setPya} />
+      <Field label="Uber Eats (%)" icon="truck-delivery-outline" keyboardType="decimal-pad" value={uber} onChangeText={setUber} />
       {msg ? <Label size={14} color={t.textSecondary}>{msg}</Label> : null}
-      <Button title="Guardar comisiones" onPress={save} />
+      <Button icon="content-save" title="Guardar comisiones" onPress={save} />
     </Card>
   );
 }
@@ -185,17 +211,20 @@ function Locations() {
 
   return (
     <Card>
-      <Label bold size={18}>Locales</Label>
+      <SectionTitle icon="store-marker">Locales</SectionTitle>
       {error ? <Label size={14} color={t.danger}>{error}</Label> : null}
       {rows.map((l) => (
         <Row key={l.id}>
-          <Label>{l.name}</Label>
-          {l.id === ctx.locationId ? <Label muted size={14}>Estás aquí</Label> : null}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+            <IconBadge name="store" color={t.primary} size={34} />
+            <Label bold size={15}>{l.name}</Label>
+          </View>
+          {l.id === ctx.locationId ? <Pill text="ESTÁS AQUÍ" color={t.success} /> : null}
         </Row>
       ))}
-      <Field label="Nuevo local" value={name} onChangeText={setName} placeholder="Ej. Sucursal Los Alcarrizos" />
+      <Field label="Nuevo local" icon="store-plus-outline" value={name} onChangeText={setName} placeholder="Ej. Sucursal Los Alcarrizos" />
       {msg ? <Label size={14} color={t.textSecondary}>{msg}</Label> : null}
-      <Button title="Agregar local" variant="secondary" onPress={add} disabled={!name.trim()} />
+      <Button icon="plus" title="Agregar local" variant="secondary" onPress={add} disabled={!name.trim()} />
     </Card>
   );
 }
@@ -238,15 +267,19 @@ function Staff() {
 
   return (
     <Card>
-      <Label bold size={18}>Personal</Label>
+      <SectionTitle icon="account-group">Personal</SectionTitle>
       {error ? <Label size={14} color={t.danger}>{error}</Label> : null}
       {rows.map((m) => (
         <Row key={m.id}>
-          <Label size={15}>
-            {m.display_name ?? 'Sin nombre'} · {ROLE_LABELS[m.role]} · {locName(m.location_id)}
-          </Label>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+            <IconBadge name={m.role === 'cocina' ? 'chef-hat' : m.role === 'cajero' ? 'cash-register' : 'account-tie'} color={t.info} size={34} />
+            <View style={{ flex: 1 }}>
+              <Label bold size={15} numberOfLines={1}>{m.display_name ?? 'Sin nombre'}</Label>
+              <Label muted size={13} numberOfLines={1}>{ROLE_LABELS[m.role]} · {locName(m.location_id)}</Label>
+            </View>
+          </View>
           {m.user_id !== ctx.userId && (m.role !== 'dueno' || ctx.role === 'dueno') ? (
-            <Button title="Quitar" variant="secondary" style={{ paddingVertical: 6 }} onPress={() => remove(m)} />
+            <Button size="sm" icon="account-remove-outline" title="Quitar" variant="danger" onPress={() => remove(m)} />
           ) : null}
         </Row>
       ))}
@@ -255,6 +288,7 @@ function Staff() {
       </Label>
       <Field
         label="Correo de la persona"
+        icon="email-outline"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -267,7 +301,7 @@ function Staff() {
         onChange={setLoc}
       />
       {msg ? <Label size={14} color={t.textSecondary}>{msg}</Label> : null}
-      <Button title="Agregar persona" variant="secondary" onPress={add} disabled={!email.trim()} />
+      <Button icon="account-plus" title="Agregar persona" variant="secondary" onPress={add} disabled={!email.trim()} />
     </Card>
   );
 }

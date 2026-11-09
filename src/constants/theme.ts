@@ -9,29 +9,56 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-    primary: '#C2410C',
-    onPrimary: '#ffffff',
-    success: '#15803D',
-    danger: '#B91C1C',
-    border: '#E0E1E6',
+    text: '#1C1917',
+    background: '#F7F5F2',
+    backgroundElement: '#FFFFFF',
+    backgroundSelected: '#F1EDE8',
+    textSecondary: '#78716C',
+    primary: '#EA580C',
+    primaryDeep: '#C2410C',
+    primarySoft: '#FFEDD5',
+    accent: '#F59E0B',
+    onPrimary: '#FFFFFF',
+    success: '#16A34A',
+    successSoft: '#DCFCE7',
+    danger: '#DC2626',
+    dangerSoft: '#FEE2E2',
+    info: '#2563EB',
+    infoSoft: '#DBEAFE',
+    border: '#ECE7E1',
+    shadow: '#7C2D12',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#FAFAF9',
+    background: '#0C0A09',
+    backgroundElement: '#1C1917',
+    backgroundSelected: '#292524',
+    textSecondary: '#A8A29E',
     primary: '#FB923C',
-    onPrimary: '#1A0A00',
+    primaryDeep: '#EA580C',
+    primarySoft: '#3B1D0B',
+    accent: '#FBBF24',
+    onPrimary: '#FFFFFF',
     success: '#4ADE80',
+    successSoft: '#0F2A1A',
     danger: '#F87171',
-    border: '#2E3135',
+    dangerSoft: '#3A1414',
+    info: '#60A5FA',
+    infoSoft: '#132339',
+    border: '#292524',
+    shadow: '#000000',
   },
+} as const;
+
+/** Degradado de marca para botones y portadas */
+export const BrandGradient = ['#F97316', '#E11D48'] as const;
+
+/** Color de cada canal de venta (igual en claro y oscuro) */
+export const ChannelColors = {
+  local: '#F97316',
+  para_llevar: '#0EA5E9',
+  pedidosya: '#E11D48',
+  ubereats: '#16A34A',
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;

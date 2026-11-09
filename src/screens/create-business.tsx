@@ -29,14 +29,14 @@ export function CreateBusinessScreen() {
         agregue con tu correo ({auth.session?.user.email}) y toca “Ya me agregaron”.
       </Label>
       <Card>
-        <Field label="Nombre del negocio" value={name} onChangeText={setName} placeholder="Ej. Yoli Comida Rápida" />
-        <Field label="RNC (opcional)" value={rnc} onChangeText={setRnc} keyboardType="number-pad" placeholder="101234567" />
-        <Field label="Nombre del primer local" value={location} onChangeText={setLocation} placeholder="Ej. Sucursal Centro" />
+        <Field label="Nombre del negocio" icon="storefront-outline" value={name} onChangeText={setName} placeholder="Ej. Yoli Comida Rápida" />
+        <Field label="RNC (opcional)" icon="card-account-details-outline" value={rnc} onChangeText={setRnc} keyboardType="number-pad" placeholder="101234567" />
+        <Field label="Nombre del primer local" icon="map-marker-outline" value={location} onChangeText={setLocation} placeholder="Ej. Sucursal Centro" />
         {msg ? <Label color={t.danger} size={14}>{msg}</Label> : null}
-        <Button title={busy ? 'Creando…' : 'Crear negocio'} onPress={submit} disabled={busy || !name.trim()} />
+        <Button size="lg" icon="rocket-launch" title={busy ? 'Creando…' : 'Crear negocio'} onPress={submit} disabled={busy || !name.trim()} />
       </Card>
-      <Button title="Ya me agregaron" variant="secondary" onPress={reload} />
-      <Button title="Cerrar sesión" variant="secondary" onPress={auth.signOut} />
+      <Button icon="refresh" title="Ya me agregaron" variant="secondary" onPress={reload} />
+      <Button icon="logout" title="Cerrar sesión" variant="ghost" onPress={auth.signOut} />
     </Screen>
   );
 }
