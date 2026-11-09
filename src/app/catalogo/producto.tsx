@@ -40,6 +40,8 @@ export default function ProductScreen() {
   const [ingredients, setIngredients] = useState<CatalogIngredient[]>([]);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
+  const [pricePy, setPricePy] = useState('');
+  const [priceUe, setPriceUe] = useState('');
   const [category, setCategory] = useState<string>('');
   const [itbis, setItbis] = useState('0.18');
   const [active, setActive] = useState(true);
@@ -62,6 +64,8 @@ export default function ProductScreen() {
         if (p) {
           setName(p.name);
           setPrice(String(p.price));
+          setPricePy(p.price_pedidosya ? String(p.price_pedidosya) : '');
+          setPriceUe(p.price_ubereats ? String(p.price_ubereats) : '');
           setCategory(p.category_id ?? '');
           setItbis(String(p.itbis_rate));
           setActive(!!p.active);
@@ -113,7 +117,17 @@ export default function ProductScreen() {
       await saveProduct(
         db,
         ctx,
-        { id, name, price: priceN, category_id: category || null, itbis_rate: itbisN, active, image_url: image },
+        {
+          id,
+          name,
+          price: priceN,
+          category_id: category || null,
+          itbis_rate: itbisN,
+          active,
+          image_url: image,
+          price_pedidosya: pricePy.trim() ? num(pricePy) : null,
+          price_ubereats: priceUe.trim() ? num(priceUe) : null,
+        },
         recipe.map((r) => ({ ingredient_id: r.ingredient_id, quantity: num(r.quantity || '0') })),
       );
       router.back();
@@ -150,6 +164,15 @@ export default function ProductScreen() {
         </View>
         <Field label="Nombre" icon="food" value={name} onChangeText={setName} placeholder="Ej. Chimichurri especial" />
         <Field label="Precio de venta (RD$, con ITBIS)" icon="cash" keyboardType="decimal-pad" value={price} onChangeText={setPrice} placeholder="0.00" />
+        <Label muted size={13}>Precio en delivery (déjalo vacío si es igual al del local)</Label>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Field label="PedidosYa (RD$)" icon="moped" keyboardType="decimal-pad" value={pricePy} onChangeText={setPricePy} placeholder={price || '0.00'} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field label="Uber Eats (RD$)" icon="truck-delivery-outline" keyboardType="decimal-pad" value={priceUe} onChangeText={setPriceUe} placeholder={price || '0.00'} />
+          </View>
+        </View>
         <Label muted size={13}>Impuesto</Label>
         <Chips options={ITBIS} value={itbis} onChange={setItbis} />
         <Label muted size={13}>Categoría</Label>

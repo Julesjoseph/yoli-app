@@ -5,6 +5,7 @@ import {
   buildProfitReport,
   computeOrderTotals,
   ingredientUsage,
+  priceFor,
   type Channel,
   type OrderForReport,
   type RecipeItem,
@@ -17,6 +18,8 @@ export interface Product {
   price: number;
   itbis_rate: number;
   image_url: string | null;
+  price_pedidosya: number | null;
+  price_ubereats: number | null;
 }
 export interface Category {
   id: string;
@@ -95,7 +98,7 @@ export const listCategories = (db: SQLiteDatabase) =>
 
 export const listProducts = (db: SQLiteDatabase) =>
   db.getAllAsync<Product>(
-    'SELECT id, category_id, name, price, itbis_rate, image_url FROM products WHERE active = 1 ORDER BY name',
+    'SELECT id, category_id, name, price, itbis_rate, image_url, price_pedidosya, price_ubereats FROM products WHERE active = 1 ORDER BY name',
   );
 
 export async function getCommissionRates(db: SQLiteDatabase, businessId: string) {
@@ -119,13 +122,15 @@ export async function recordSale(
     paymentMethod: PaymentMethod;
     externalRef?: string;
     applyTipLaw?: boolean;
+    /** Descuento en RD$ (con ITBIS). */
+    discount?: number;
   },
 ) {
   const rates = await getCommissionRates(db, ctx.businessId);
   const totals = computeOrderTotals(
-    input.lines.map((l) => ({ unitPrice: l.product.price, quantity: l.quantity, itbisRate: l.product.itbis_rate })),
+    input.lines.map((l) => ({ unitPrice: priceFor(l.product, input.channel), quantity: l.quantity, itbisRate: l.product.itbis_rate })),
     input.channel,
-    { commissionRate: rates[input.channel] ?? 0, applyTipLaw: input.applyTipLaw },
+    { commissionRate: rates[input.channel] ?? 0, applyTipLaw: input.applyTipLaw, discount: input.discount },
   );
   const productIds = input.lines.map((l) => l.product.id);
   const recipes = await db.getAllAsync<{ product_id: string; ingredient_id: string; quantity: number }>(
@@ -154,17 +159,20 @@ export async function recordSale(
     net_income: totals.netIncome,
     payment_method: input.paymentMethod,
     created_at: now,
+    discount: totals.discount,
   };
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO orders (id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law,
-        total, platform_commission, net_income, payment_method, created_at)
+        total, platform_commission, net_income, payment_method, created_at, discount)
        VALUES ($id, $business_id, $location_id, $channel, $external_ref, $status, $subtotal, $itbis, $tip_law,
-        $total, $platform_commission, $net_income, $payment_method, $created_at)`,
+        $total, $platform_commission, $net_income, $payment_method, $created_at, $discount)`,
       Object.fromEntries(Object.entries(order).map(([k, v]) => ['$' + k, v])),
     );
-    await enqueue(db, 'orders', order, ctx);
+    // El descuento solo se sube si hay uno (así sigue funcionando aunque la nube aún no tenga esa columna).
+    const { discount, ...rest } = order;
+    await enqueue(db, 'orders', discount > 0 ? order : rest, ctx);
 
     for (const l of input.lines) {
       const item = {
@@ -172,7 +180,7 @@ export async function recordSale(
         order_id: order.id,
         product_id: l.product.id,
         name: l.product.name,
-        unit_price: l.product.price,
+        unit_price: priceFor(l.product, input.channel),
         quantity: l.quantity,
       };
       await db.runAsync(

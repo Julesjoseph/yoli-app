@@ -51,7 +51,7 @@ export function saveTicketSettings(db: SQLiteDatabase, s: TicketSettings) {
 
 export async function getTicketOrder(db: SQLiteDatabase, orderId: string): Promise<TicketOrder | null> {
   const o = await db.getFirstAsync<Omit<TicketOrder, 'items'>>(
-    'SELECT id, channel, external_ref, subtotal, itbis, tip_law, total, payment_method, created_at FROM orders WHERE id = ?',
+    'SELECT id, channel, external_ref, subtotal, discount, itbis, tip_law, total, payment_method, created_at FROM orders WHERE id = ?',
     [orderId],
   );
   if (!o) return null;

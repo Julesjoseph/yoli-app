@@ -88,7 +88,7 @@ export default function ProductDetailScreen() {
                 </View>
               ) : null}
               <Text style={[styles.name, { color: t.text }]}>{product.name}</Text>
-              <Text style={[styles.price, { color: t.primary }]}>{formatRD(product.price)}</Text>
+              <Text style={[styles.price, { color: t.primary }]}>{formatRD(cart.priceOf(product))}</Text>
               <Label muted size={13}>Precio con ITBIS incluido</Label>
               {inCart ? <Label size={13} color={t.success}>Ya tienes {inCart} en la orden</Label> : null}
             </View>
@@ -139,7 +139,7 @@ export default function ProductDetailScreen() {
             }}
             style={({ pressed }) => [styles.cta, { backgroundColor: t.primary, opacity: pressed ? 0.85 : 1 }]}>
             <Icon name="cart-plus" color="#FFFFFF" size={20} />
-            <Text style={styles.ctaText} numberOfLines={1}>Agregar · {formatRD(product.price * qty)}</Text>
+            <Text style={styles.ctaText} numberOfLines={1}>Agregar · {formatRD(cart.priceOf(product) * qty)}</Text>
           </Pressable>
         </SafeAreaView>
       ) : null}

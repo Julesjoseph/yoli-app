@@ -106,7 +106,7 @@ export default function MenuScreen() {
                   </View>
                 </Pressable>
                 <View style={styles.priceRow}>
-                  <Text style={{ color: t.text, fontWeight: '900', fontSize: 16 }}>{formatRD(p.price)}</Text>
+                  <Text style={{ color: t.text, fontWeight: '900', fontSize: 16 }}>{formatRD(cart.priceOf(p))}</Text>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Agregar ${p.name} a la orden`}

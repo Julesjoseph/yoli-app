@@ -14,6 +14,7 @@ export interface TicketOrder {
   channel: string;
   external_ref: string | null;
   subtotal: number;
+  discount?: number;
   itbis: number;
   tip_law: number;
   total: number;
@@ -82,6 +83,7 @@ ${shop.cashier ? `<tr><td>Atendió</td><td class="r">${esc(shop.cashier)}</td></
 <table>${lines}</table>
 <hr>
 <table>
+${order.discount ? `<tr><td>Descuento</td><td class="r">-${money(order.discount)}</td></tr>` : ''}
 <tr><td>Subtotal</td><td class="r">${money(order.subtotal)}</td></tr>
 <tr><td>ITBIS 18%</td><td class="r">${money(order.itbis)}</td></tr>
 ${order.tip_law > 0 ? `<tr><td>Propina legal 10%</td><td class="r">${money(order.tip_law)}</td></tr>` : ''}

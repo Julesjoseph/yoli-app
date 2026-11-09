@@ -1,7 +1,12 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
 import type { PaymentMethod, Product } from '@/db/repo';
-import { computeOrderTotals, type Channel } from '@/lib/calc';
+import { computeOrderTotals, DELIVERY_CHANNELS, priceFor, round2, type Channel } from '@/lib/calc';
+
+export interface Discount {
+  kind: 'pct' | 'monto';
+  value: number;
+}
 
 export interface CartLine {
   product: Product;
@@ -14,7 +19,11 @@ interface CartState {
   channel: Channel;
   payment: PaymentMethod;
   externalRef: string;
+  /** Descuento elegido (solo comedor y para llevar). */
+  discount: Discount;
   totals: ReturnType<typeof computeOrderTotals>;
+  /** Precio de un producto en el canal actual. */
+  priceOf(p: Product): number;
   qtyOf(id: string): number;
   add(p: Product, qty?: number): void;
   remove(id: string): void;
@@ -23,6 +32,7 @@ interface CartState {
   setChannel(c: Channel): void;
   setPayment(p: PaymentMethod): void;
   setExternalRef(s: string): void;
+  setDiscount(d: Discount): void;
 }
 
 const CartContext = createContext<CartState | null>(null);
@@ -33,16 +43,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [channel, setChannel] = useState<Channel>('local');
   const [payment, setPayment] = useState<PaymentMethod>('efectivo');
   const [externalRef, setExternalRef] = useState('');
+  const [discount, setDiscount] = useState<Discount>({ kind: 'pct', value: 0 });
 
   const lines = Object.values(items);
-  const totals = useMemo(
-    () =>
-      computeOrderTotals(
-        lines.map((l) => ({ unitPrice: l.product.price, quantity: l.quantity, itbisRate: l.product.itbis_rate })),
-        channel,
-      ),
-    [lines, channel],
-  );
+  const totals = useMemo(() => {
+    const cartLines = lines.map((l) => ({ unitPrice: priceFor(l.product, channel), quantity: l.quantity, itbisRate: l.product.itbis_rate }));
+    const full = cartLines.reduce((n, l) => n + l.unitPrice * l.quantity, 0);
+    const amount = DELIVERY_CHANNELS.includes(channel)
+      ? 0
+      : discount.kind === 'pct'
+        ? round2((full * Math.min(discount.value, 100)) / 100)
+        : discount.value;
+    return computeOrderTotals(cartLines, channel, { discount: amount });
+  }, [lines, channel, discount]);
 
   const value: CartState = {
     lines,
@@ -50,7 +63,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     channel,
     payment,
     externalRef,
+    discount,
     totals,
+    priceOf: (p) => priceFor(p, channel),
     qtyOf: (id) => items[id]?.quantity ?? 0,
     add: (p, qty = 1) =>
       setItems((c) => ({ ...c, [p.id]: { product: p, quantity: (c[p.id]?.quantity ?? 0) + qty } })),
@@ -71,10 +86,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     clear: () => {
       setItems({});
       setExternalRef('');
+      setDiscount({ kind: 'pct', value: 0 });
     },
     setChannel,
     setPayment,
     setExternalRef,
+    setDiscount,
   };
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

@@ -8,15 +8,24 @@ import { loadSampleCatalog } from './catalog';
  * Las columnas tienen los mismos nombres que en Supabase para que la
  * sincronización envíe las filas tal cual.
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export async function migrate(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const current = row?.user_version ?? 0;
   if (current >= SCHEMA_VERSION) return;
-  if (current === 1) {
+  if (current >= 1) {
     // v2: foto de producto
-    await db.execAsync(`ALTER TABLE products ADD COLUMN image_url TEXT; PRAGMA user_version = 2;`);
+    if (current < 2) await db.execAsync(`ALTER TABLE products ADD COLUMN image_url TEXT;`);
+    // v3: precios para PedidosYa / Uber Eats y descuento en la orden
+    if (current < 3) {
+      await db.execAsync(`
+        ALTER TABLE products ADD COLUMN price_pedidosya REAL;
+        ALTER TABLE products ADD COLUMN price_ubereats REAL;
+        ALTER TABLE orders ADD COLUMN discount REAL NOT NULL DEFAULT 0;
+      `);
+    }
+    await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     return;
   }
 
@@ -36,7 +45,7 @@ export async function migrate(db: SQLiteDatabase) {
     CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY, business_id TEXT NOT NULL, category_id TEXT, name TEXT NOT NULL,
       price REAL NOT NULL, itbis_rate REAL NOT NULL DEFAULT 0.18, active INTEGER NOT NULL DEFAULT 1,
-      image_url TEXT
+      image_url TEXT, price_pedidosya REAL, price_ubereats REAL
     );
     CREATE TABLE IF NOT EXISTS ingredients (
       id TEXT PRIMARY KEY, business_id TEXT NOT NULL, name TEXT NOT NULL, unit TEXT NOT NULL,
@@ -58,7 +67,8 @@ export async function migrate(db: SQLiteDatabase) {
       id TEXT PRIMARY KEY, business_id TEXT NOT NULL, location_id TEXT NOT NULL, channel TEXT NOT NULL,
       external_ref TEXT, status TEXT NOT NULL DEFAULT 'pagada', subtotal REAL NOT NULL, itbis REAL NOT NULL,
       tip_law REAL NOT NULL DEFAULT 0, total REAL NOT NULL, platform_commission REAL NOT NULL DEFAULT 0,
-      net_income REAL NOT NULL, payment_method TEXT, created_at TEXT NOT NULL
+      net_income REAL NOT NULL, payment_method TEXT, created_at TEXT NOT NULL,
+      discount REAL NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS orders_by_date ON orders (location_id, created_at);
     CREATE TABLE IF NOT EXISTS order_items (

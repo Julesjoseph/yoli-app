@@ -123,6 +123,7 @@ export default function CatalogScreen() {
                           <Label bold size={15} numberOfLines={2}>{p.name}</Label>
                           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
                             {!p.active ? <Pill text="OCULTO" color={t.textSecondary} /> : null}
+                            {p.price_pedidosya || p.price_ubereats ? <Pill text="PRECIO DELIVERY" color={t.info} /> : null}
                             {margin !== null ? (
                               <Pill text={`MARGEN ${margin}%`} color={margin >= 50 ? t.success : margin >= 25 ? t.accent : t.danger} />
                             ) : (

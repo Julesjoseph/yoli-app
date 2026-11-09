@@ -44,6 +44,7 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
         lines: cart.lines,
         paymentMethod: isDelivery ? 'plataforma' : cart.payment,
         externalRef: cart.externalRef,
+        discount: cart.totals.discount,
       });
       cart.clear();
       onCharged?.();
@@ -84,7 +85,7 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
                 </Pressable>
               </Row>
               <Row>
-                <Text style={{ color: t.primary, fontWeight: '900', fontSize: 15 }}>{formatRD(l.product.price * l.quantity)}</Text>
+                <Text style={{ color: t.primary, fontWeight: '900', fontSize: 15 }}>{formatRD(cart.priceOf(l.product) * l.quantity)}</Text>
                 <View style={[styles.stepper, { borderColor: t.border }]}>
                   <Pressable onPress={() => cart.remove(l.product.id)} accessibilityLabel="Uno menos" hitSlop={6}>
                     <Icon name="minus" size={18} color={t.primary} />
@@ -115,11 +116,15 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
           <>
             <Label bold size={16}>Forma de pago</Label>
             <Chips options={PAYMENTS} value={cart.payment} onChange={cart.setPayment} />
+            <DiscountPicker />
           </>
         )}
       </Card>
 
       <Card style={{ gap: 8 }}>
+        {cart.totals.discount > 0 ? (
+          <Row><Label size={14} color={t.success}>Descuento</Label><Label size={14} color={t.success}>−{formatRD(cart.totals.discount)}</Label></Row>
+        ) : null}
         <Row><Label muted size={14}>Subtotal</Label><Label size={14}>{formatRD(cart.totals.subtotal)}</Label></Row>
         <Row><Label muted size={14}>ITBIS 18%</Label><Label size={14}>{formatRD(cart.totals.itbis)}</Label></Row>
         {cart.totals.tipLaw > 0 ? (
@@ -139,6 +144,63 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
         onPress={charge}
         disabled={cart.lines.length === 0 || saving}
       />
+    </View>
+  );
+}
+
+const QUICK = [0, 5, 10, 15, 20];
+
+/** Descuento para comedor y para llevar: rápido por % o un monto en RD$. */
+function DiscountPicker() {
+  const cart = useCart();
+  const t = useTheme();
+  const { kind, value } = cart.discount;
+  const [text, setText] = useState(value ? String(value) : '');
+  const custom = kind === 'monto' || !QUICK.includes(value);
+  return (
+    <View style={{ gap: 10 }}>
+      <Row>
+        <Label bold size={16}>Descuento</Label>
+        {cart.totals.discount > 0 ? <Label size={14} color={t.success} bold>−{formatRD(cart.totals.discount)}</Label> : null}
+      </Row>
+      <Chips
+        options={[
+          ...QUICK.map((q) => ({ value: String(q), label: q ? `${q}%` : 'Sin descuento' })),
+          { value: 'otro', label: 'Otro', icon: 'pencil-outline' as const },
+        ]}
+        value={custom ? 'otro' : String(value)}
+        onChange={(v) => {
+          if (v === 'otro') {
+            cart.setDiscount({ kind: 'monto', value: 0 });
+            setText('');
+          } else {
+            cart.setDiscount({ kind: 'pct', value: Number(v) });
+          }
+        }}
+      />
+      {custom ? (
+        <View style={{ gap: 8 }}>
+          <Chips
+            options={[
+              { value: 'monto', label: 'Monto RD$' },
+              { value: 'pct', label: 'Porcentaje %' },
+            ]}
+            value={kind}
+            onChange={(k) => cart.setDiscount({ kind: k, value: Number(text.replace(',', '.')) || 0 })}
+          />
+          <Field
+            label={kind === 'monto' ? 'Descuento en RD$' : 'Descuento en %'}
+            icon="sale"
+            keyboardType="decimal-pad"
+            value={text}
+            onChangeText={(v) => {
+              setText(v);
+              cart.setDiscount({ kind, value: Number(v.replace(',', '.')) || 0 });
+            }}
+            placeholder="0"
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

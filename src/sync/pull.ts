@@ -48,7 +48,7 @@ export async function pullCatalog(db: SQLiteDatabase, businessId: string) {
     }
     await insertRows(db, 'locations', locations, ['id', 'business_id', 'name', 'kind']);
     await insertRows(db, 'categories', categories, ['id', 'business_id', 'name', 'sort_order']);
-    await insertRows(db, 'products', products, ['id', 'business_id', 'category_id', 'name', 'price', 'itbis_rate', 'active', 'image_url']);
+    await insertRows(db, 'products', products, ['id', 'business_id', 'category_id', 'name', 'price', 'itbis_rate', 'active', 'image_url', 'price_pedidosya', 'price_ubereats']);
     await insertRows(db, 'ingredients', ingredients, ['id', 'business_id', 'name', 'unit', 'cost_per_unit', 'min_stock']);
     await insertRows(db, 'recipe_items', recipes, ['product_id', 'ingredient_id', 'quantity']);
     await insertRows(db, 'platform_commissions', commissions, ['business_id', 'platform_id', 'commission_rate']);
@@ -87,9 +87,9 @@ export async function pullLocationActivity(db: SQLiteDatabase, businessId: strin
       'inventory_movements',
     ]);
 
-    await insertRows(db, 'orders', orders, [
+    await insertRows(db, 'orders', orders.map((o) => ({ ...o, discount: o.discount ?? 0 })), [
       'id', 'business_id', 'location_id', 'channel', 'external_ref', 'status', 'subtotal', 'itbis', 'tip_law', 'total',
-      'platform_commission', 'net_income', 'payment_method', 'created_at',
+      'platform_commission', 'net_income', 'payment_method', 'created_at', 'discount',
     ]);
     await insertRows(db, 'order_items', items, ['id', 'order_id', 'product_id', 'name', 'unit_price', 'quantity']);
     await insertRows(db, 'expenses', expenses, [

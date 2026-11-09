@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeOrderTotals, ingredientUsage, buildProfitReport } from '../src/lib/calc.ts';
+import { computeOrderTotals, ingredientUsage, buildProfitReport, priceFor } from '../src/lib/calc.ts';
 
 test('comedor: ITBIS incluido y 10% de ley de propina', () => {
   const t = computeOrderTotals([{ unitPrice: 236, quantity: 1, itbisRate: 0.18 }], 'local');
@@ -52,4 +52,27 @@ test('reporte de ganancia por canal', () => {
   assert.equal(r.commissions, 295);
   assert.equal(r.byChannel.pedidosya.net, 885);
   assert.equal(r.profit, 1416 - 295 - 216 - 300);
+});
+
+test('descuento: baja ITBIS y propina en proporción', () => {
+  const t = computeOrderTotals([{ unitPrice: 236, quantity: 1, itbisRate: 0.18 }], 'local', { discount: 23.6 });
+  assert.equal(t.discount, 23.6);
+  assert.equal(t.gross, 212.4);
+  assert.equal(t.subtotal, 180);
+  assert.equal(t.itbis, 32.4);
+  assert.equal(t.tipLaw, 18);
+  assert.equal(t.total, 230.4);
+  assert.equal(t.netIncome, 212.4);
+});
+
+test('descuento no puede pasar del total', () => {
+  const t = computeOrderTotals([{ unitPrice: 100, quantity: 1, itbisRate: 0.18 }], 'para_llevar', { discount: 500 });
+  assert.equal(t.total, 0);
+});
+
+test('precio por canal: PedidosYa y Uber Eats usan su precio si lo tienen', () => {
+  const p = { price: 100, price_pedidosya: 125, price_ubereats: null };
+  assert.equal(priceFor(p, 'local'), 100);
+  assert.equal(priceFor(p, 'pedidosya'), 125);
+  assert.equal(priceFor(p, 'ubereats'), 100);
 });

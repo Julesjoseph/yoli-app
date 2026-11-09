@@ -20,6 +20,8 @@ export interface CatalogProduct {
   itbis_rate: number;
   active: number;
   image_url: string | null;
+  price_pedidosya: number | null;
+  price_ubereats: number | null;
 }
 export interface CatalogCategory {
   id: string;
@@ -40,7 +42,7 @@ export interface RecipeLine {
 
 export const listCatalogProducts = (db: SQLiteDatabase) =>
   db.getAllAsync<CatalogProduct>(
-    'SELECT id, name, price, category_id, itbis_rate, active, image_url FROM products ORDER BY active DESC, name',
+    'SELECT id, name, price, category_id, itbis_rate, active, image_url, price_pedidosya, price_ubereats FROM products ORDER BY active DESC, name',
   );
 export const listCatalogCategories = (db: SQLiteDatabase) =>
   db.getAllAsync<CatalogCategory>('SELECT id, name, sort_order FROM categories ORDER BY sort_order, name');
@@ -51,7 +53,7 @@ export const getRecipe = (db: SQLiteDatabase, productId: string) =>
 
 export async function getProduct(db: SQLiteDatabase, id: string) {
   return db.getFirstAsync<CatalogProduct>(
-    'SELECT id, name, price, category_id, itbis_rate, active, image_url FROM products WHERE id = ?',
+    'SELECT id, name, price, category_id, itbis_rate, active, image_url, price_pedidosya, price_ubereats FROM products WHERE id = ?',
     [id],
   );
 }
@@ -67,6 +69,9 @@ export function recipeCost(recipe: RecipeLine[], ingredients: CatalogIngredient[
 function friendly(message: string) {
   if (/network|fetch|failed to fetch|timeout/i.test(message)) {
     return 'Necesitas internet para cambiar el catálogo.';
+  }
+  if (/price_pedidosya|price_ubereats/i.test(message)) {
+    return 'Falta actualizar la nube: ejecuta el archivo 0004_precios_delivery_descuentos.sql en Supabase.';
   }
   if (/row-level security|permission/i.test(message)) {
     return 'Solo el dueño o un gerente puede cambiar el catálogo.';
@@ -136,9 +141,25 @@ export async function saveProduct(
     itbis_rate: number;
     active: boolean;
     image_url?: string | null;
+    /** Precio en PedidosYa / Uber Eats (vacío = igual que en el local). */
+    price_pedidosya?: number | null;
+    price_ubereats?: number | null;
   },
   recipe: RecipeLine[],
 ) {
+  const before = input.id
+    ? await db.getFirstAsync<{ price_pedidosya: number | null; price_ubereats: number | null }>(
+        'SELECT price_pedidosya, price_ubereats FROM products WHERE id = ?',
+        [input.id],
+      )
+    : null;
+  const pedidosya = input.price_pedidosya ?? null;
+  const ubereats = input.price_ubereats ?? null;
+  // Los precios de delivery solo se envían si se usan, así funciona aunque la nube aún no tenga esas columnas.
+  const deliveryPrices =
+    pedidosya !== null || ubereats !== null || before?.price_pedidosya != null || before?.price_ubereats != null
+      ? { price_pedidosya: pedidosya, price_ubereats: ubereats }
+      : {};
   const row = {
     id: input.id ?? randomUUID(),
     business_id: ctx.businessId,
@@ -149,9 +170,13 @@ export async function saveProduct(
     active: input.active,
     // Solo se envía si se cambió, así funciona aunque la nube aún no tenga la columna de fotos.
     ...(input.image_url !== undefined ? { image_url: input.image_url } : {}),
+    ...deliveryPrices,
   };
   if (!row.name) throw new Error('Escribe el nombre del producto.');
   if (!Number.isFinite(row.price) || row.price <= 0) throw new Error('Escribe un precio válido.');
+  if ([pedidosya, ubereats].some((n) => n !== null && (!Number.isFinite(n) || n <= 0))) {
+    throw new Error('Revisa los precios de PedidosYa y Uber Eats (o déjalos vacíos).');
+  }
   const lines = recipe.filter((r) => Number.isFinite(r.quantity) && r.quantity > 0);
 
   await cloud(ctx, () => supabase!.from('products').upsert({ ...row, updated_at: new Date().toISOString() }));
@@ -166,8 +191,9 @@ export async function saveProduct(
     const previous = await db.getFirstAsync<{ image_url: string | null }>('SELECT image_url FROM products WHERE id = ?', [row.id]);
     const image = input.image_url !== undefined ? input.image_url : (previous?.image_url ?? null);
     await db.runAsync(
-      'INSERT OR REPLACE INTO products (id, business_id, category_id, name, price, itbis_rate, active, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [row.id, row.business_id, row.category_id, row.name, row.price, row.itbis_rate, row.active ? 1 : 0, image],
+      `INSERT OR REPLACE INTO products (id, business_id, category_id, name, price, itbis_rate, active, image_url, price_pedidosya, price_ubereats)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [row.id, row.business_id, row.category_id, row.name, row.price, row.itbis_rate, row.active ? 1 : 0, image, pedidosya, ubereats],
     );
     await db.runAsync('DELETE FROM recipe_items WHERE product_id = ?', [row.id]);
     for (const l of lines) {
