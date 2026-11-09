@@ -118,7 +118,7 @@ export default function PosScreen() {
   );
 
   return (
-    <Screen title="Caja">
+    <Screen title="Caja" right={<Label muted>{ctx.locationName}</Label>}>
       {isTablet ? <View style={{ flexDirection: 'row', gap: 16 }}>{menu}{ticket}</View> : <>{menu}{ticket}</>}
     </Screen>
   );

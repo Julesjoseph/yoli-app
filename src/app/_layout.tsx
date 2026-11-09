@@ -2,18 +2,43 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { useColorScheme } from 'react-native';
 
+import { AuthProvider } from '@/auth/auth';
 import AppTabs from '@/components/app-tabs';
 import { migrate } from '@/db/database';
-import { BusinessProvider } from '@/hooks/use-business';
+import { BusinessProvider, useBusinessState } from '@/hooks/use-business';
+import { ChooseLocationScreen } from '@/screens/choose-location';
+import { CreateBusinessScreen } from '@/screens/create-business';
+import { LoginScreen } from '@/screens/login';
+import { ErrorScreen, LoadingScreen } from '@/screens/status';
+
+function Gate() {
+  const { phase } = useBusinessState();
+  switch (phase.kind) {
+    case 'loading':
+      return <LoadingScreen message={phase.message} />;
+    case 'login':
+      return <LoginScreen />;
+    case 'no-business':
+      return <CreateBusinessScreen />;
+    case 'choose-location':
+      return <ChooseLocationScreen options={phase.options} />;
+    case 'error':
+      return <ErrorScreen message={phase.message} />;
+    case 'ready':
+      return <AppTabs role={phase.ctx.role} />;
+  }
+}
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <SQLiteProvider databaseName="yoli.db" onInit={migrate}>
-        <BusinessProvider>
-          <AppTabs />
-        </BusinessProvider>
+        <AuthProvider>
+          <BusinessProvider>
+            <Gate />
+          </BusinessProvider>
+        </AuthProvider>
       </SQLiteProvider>
     </ThemeProvider>
   );

@@ -42,21 +42,49 @@ export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'platafor
 export const localDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+export type Role = 'dueno' | 'gerente' | 'cajero' | 'cocina';
+
+export const ROLE_LABELS: Record<Role, string> = {
+  dueno: 'Dueño',
+  gerente: 'Gerente',
+  cajero: 'Cajero',
+  cocina: 'Cocina',
+};
+
 export interface Context {
+  demo: boolean;
+  userId: string;
+  role: Role;
   businessId: string;
+  businessName: string;
   locationId: string;
+  locationName: string;
 }
 
-export async function getContext(db: SQLiteDatabase): Promise<Context> {
+/** Lee el negocio/local/rol activo. Devuelve null si falta elegir algo. */
+export async function getContext(db: SQLiteDatabase): Promise<Context | null> {
   const rows = await db.getAllAsync<{ key: string; value: string }>('SELECT key, value FROM app_settings');
-  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  return { businessId: map.business_id, locationId: map.location_id };
+  const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  if (!m.business_id || !m.location_id || !m.role || !m.user_id) return null;
+  return {
+    demo: m.mode === 'demo',
+    userId: m.user_id,
+    role: m.role as Role,
+    businessId: m.business_id,
+    businessName: m.business_name ?? '',
+    locationId: m.location_id,
+    locationName: m.location_name ?? '',
+  };
 }
 
-async function enqueue(db: SQLiteDatabase, table: string, payload: object) {
+// Tablas de la nube que guardan quién hizo el registro
+const HAS_CREATED_BY = new Set(['orders', 'inventory_movements', 'expenses']);
+
+async function enqueue(db: SQLiteDatabase, table: string, payload: object, ctx?: Context) {
+  const body = ctx && !ctx.demo && HAS_CREATED_BY.has(table) ? { ...payload, created_by: ctx.userId } : payload;
   await db.runAsync('INSERT INTO outbox (table_name, payload, created_at) VALUES (?, ?, ?)', [
     table,
-    JSON.stringify(payload),
+    JSON.stringify(body),
     new Date().toISOString(),
   ]);
 }
@@ -135,7 +163,7 @@ export async function recordSale(
         $total, $platform_commission, $net_income, $payment_method, $created_at)`,
       Object.fromEntries(Object.entries(order).map(([k, v]) => ['$' + k, v])),
     );
-    await enqueue(db, 'orders', order);
+    await enqueue(db, 'orders', order, ctx);
 
     for (const l of input.lines) {
       const item = {
@@ -185,7 +213,7 @@ async function insertMovement(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [mv.id, mv.business_id, mv.location_id, mv.ingredient_id, mv.quantity, mv.reason, mv.order_id, mv.note, mv.created_at],
   );
-  await enqueue(db, 'inventory_movements', mv);
+  await enqueue(db, 'inventory_movements', mv, ctx);
 }
 
 export async function addStock(
@@ -233,7 +261,7 @@ export async function addExpense(
       [exp.id, exp.business_id, exp.location_id, exp.category, exp.description, exp.amount, exp.supplier_rnc, exp.ncf,
         exp.spent_at, exp.created_at],
     );
-    await enqueue(db, 'expenses', exp);
+    await enqueue(db, 'expenses', exp, ctx);
   });
 }
 

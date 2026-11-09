@@ -27,11 +27,33 @@ npx expo start
 
 Escanea el código QR con la app **Expo Go** en tu teléfono o tablet. La primera vez se cargan productos e insumos de ejemplo.
 
+Sin Supabase configurado, la app arranca en **modo demo**: un solo local con datos de ejemplo y sin inicio de sesión.
+
 ## Conectar la nube (Supabase)
 
 1. Crea un proyecto gratis en https://supabase.com
-2. En *SQL Editor*, ejecuta `supabase/migrations/0001_esquema_inicial.sql`.
-3. Copia `.env.example` como `.env` y pon la URL y la anon key del proyecto.
+2. En *SQL Editor*, ejecuta en orden los archivos de `supabase/migrations/` (`0001_…` y luego `0002_…`).
+3. Copia `.env.example` como `.env` y pon la URL y la anon key del proyecto (Project Settings > API).
+4. Abre la app, toca **Crear cuenta**, y luego **Crear negocio**. Quedas como dueño.
+
+### Personal y roles
+
+Cada empleado crea su cuenta en la app con su correo. Luego el dueño o un gerente lo agrega en **Ajustes > Personal**, eligiendo su rol y su local (o todos los locales).
+
+| Rol | Puede |
+| --- | --- |
+| Dueño | Todo, incluido agregar o quitar gerentes y otros dueños |
+| Gerente | Todo menos tocar a los dueños: menú, locales, personal, gastos y reportes |
+| Cajero | Caja e inventario de su local |
+| Cocina | Caja e inventario de su local |
+
+Los permisos se aplican también en el servidor (RLS de Postgres), no solo en la app.
+
+### Cómo funciona sin internet
+
+- Al entrar, la app descarga el menú, insumos, recetas y locales del negocio, más las ventas y gastos del local de los últimos 35 días y su stock actual.
+- Cada venta, gasto o movimiento de inventario se guarda primero en el equipo y entra a una cola. La cola se sube sola cada minuto y al volver a abrir la app.
+- Si alguien ya entró antes en ese equipo, puede seguir trabajando aunque no haya internet al abrir la app.
 
 ## Estructura
 
@@ -42,13 +64,14 @@ src/db/             Base de datos local y consultas
 src/sync/           Subida de la cola local a Supabase
 src/invoicing/      Adaptador para el proveedor de factura electrónica
 supabase/           Esquema de la base de datos en la nube
-tests/              Pruebas (npm test)
+src/auth/           Inicio de sesión (Supabase Auth)
+src/screens/        Pantallas previas: entrar, crear negocio, elegir local
+tests/              Pruebas de cálculos (npm test)
+supabase/tests/     Pruebas de seguridad del servidor (npm run test:db, requiere Postgres local)
 ```
 
 ## Próximos pasos
 
-- Inicio de sesión y roles (dueño, gerente, cajero, cocina) con Supabase Auth
-- Selector de local y descarga del menú/insumos desde la nube
 - Editar menú, recetas y precios distintos por plataforma
 - Cierre de caja diario
 - Importar reportes de PedidosYa y Uber Eats (CSV)

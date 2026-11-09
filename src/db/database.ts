@@ -70,20 +70,49 @@ export async function migrate(db: SQLiteDatabase) {
     );
   `);
 
-  await seedDemoData(db);
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
-/** Datos de ejemplo para probar la app el primer día. */
-async function seedDemoData(db: SQLiteDatabase) {
-  const existing = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM locations');
-  if (existing && existing.n > 0) return;
+const DATA_TABLES = [
+  'order_items', 'orders', 'inventory_movements', 'expenses', 'recipe_items', 'products',
+  'categories', 'ingredients', 'platform_commissions', 'locations', 'outbox', 'app_settings',
+];
+
+/** Borra todo lo guardado en el equipo (al cambiar de negocio o salir del modo demo). */
+export async function resetLocalData(db: SQLiteDatabase) {
+  await db.withTransactionAsync(async () => {
+    for (const t of DATA_TABLES) await db.runAsync(`DELETE FROM ${t}`);
+  });
+}
+
+export async function getSetting(db: SQLiteDatabase, key: string) {
+  const r = await db.getFirstAsync<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', [key]);
+  return r?.value ?? null;
+}
+
+export async function setSettings(db: SQLiteDatabase, values: Record<string, string | null>) {
+  for (const [key, value] of Object.entries(values)) {
+    if (value === null) await db.runAsync('DELETE FROM app_settings WHERE key = ?', [key]);
+    else await db.runAsync('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [key, value]);
+  }
+}
+
+/** Datos de ejemplo para probar la app sin conexión a la nube (modo demo). */
+export async function ensureDemoData(db: SQLiteDatabase) {
+  if ((await getSetting(db, 'mode')) === 'demo') return;
+  await resetLocalData(db);
 
   const businessId = randomUUID();
   const locationId = randomUUID();
-  await db.runAsync('INSERT INTO app_settings (key, value) VALUES (?, ?), (?, ?)', [
-    'business_id', businessId, 'location_id', locationId,
-  ]);
+  await setSettings(db, {
+    mode: 'demo',
+    user_id: 'demo',
+    business_id: businessId,
+    business_name: 'Mi negocio (demo)',
+    location_id: locationId,
+    location_name: 'Local principal',
+    role: 'dueno',
+  });
   await db.runAsync('INSERT INTO locations (id, business_id, name, kind) VALUES (?, ?, ?, ?)', [
     locationId, businessId, 'Local principal', 'mixto',
   ]);

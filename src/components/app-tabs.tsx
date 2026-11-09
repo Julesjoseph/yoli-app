@@ -1,9 +1,12 @@
 import { NativeTabs } from 'expo-router/native-tabs';
 
+import type { Role } from '@/db/repo';
 import { useTheme } from '@/hooks/use-theme';
 
-export default function AppTabs() {
+/** Cajero y cocina ven Caja, Inventario y Ajustes. Dueño y gerente ven todo. */
+export default function AppTabs({ role }: { role: Role }) {
   const colors = useTheme();
+  const manager = role === 'dueno' || role === 'gerente';
   return (
     <NativeTabs
       backgroundColor={colors.background}
@@ -17,13 +20,17 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>Inventario</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="shippingbox.fill" md="inventory_2" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="gastos">
+      <NativeTabs.Trigger name="gastos" hidden={!manager}>
         <NativeTabs.Trigger.Label>Gastos</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="creditcard.fill" md="payments" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="reportes">
+      <NativeTabs.Trigger name="reportes" hidden={!manager}>
         <NativeTabs.Trigger.Label>Reportes</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="chart.bar.fill" md="bar_chart" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="ajustes">
+        <NativeTabs.Trigger.Label>Ajustes</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="gearshape.fill" md="settings" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );
