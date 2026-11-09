@@ -6,6 +6,16 @@ const BATCH = 100;
 // Orden de subida para respetar las llaves foráneas del servidor
 const TABLE_ORDER = ['orders', 'order_items', 'inventory_movements', 'expenses'];
 
+// Aviso de "hay algo nuevo en este equipo" para subirlo al instante.
+const localListeners = new Set<() => void>();
+export function onLocalChange(listener: () => void) {
+  localListeners.add(listener);
+  return () => void localListeners.delete(listener);
+}
+export function notifyLocalChange() {
+  localListeners.forEach((l) => l());
+}
+
 export type SyncResult = { pushed: number; pending: number; error?: string; offlineMode?: boolean };
 
 /**

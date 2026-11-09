@@ -1,6 +1,8 @@
 import { randomUUID } from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { notifyLocalChange } from '@/sync/sync';
+
 import {
   buildProfitReport,
   computeOrderTotals,
@@ -92,6 +94,8 @@ async function enqueue(db: SQLiteDatabase, table: string, payload: object, ctx?:
     JSON.stringify(body),
     new Date().toISOString(),
   ]);
+  // Se sube enseguida (un momento después, para juntar todo lo de la misma venta).
+  if (!ctx?.demo) notifyLocalChange();
 }
 
 export const listCategories = (db: SQLiteDatabase) =>

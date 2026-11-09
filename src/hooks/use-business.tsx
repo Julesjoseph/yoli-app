@@ -8,7 +8,13 @@ import { ensureDemoData, getSetting, resetLocalData, setSettings } from '@/db/da
 import { getContext, type Context, type Role } from '@/db/repo';
 import { pullCatalog, pullLocationActivity } from '@/sync/pull';
 import { supabase } from '@/sync/supabase';
-import { pushOutbox } from '@/sync/sync';
+import { onLocalChange, pushOutbox } from '@/sync/sync';
+
+// Tablas que avisan al instante cuando cambian en la nube.
+const REALTIME_TABLES = [
+  'orders', 'expenses', 'inventory_movements', 'products', 'categories', 'ingredients', 'recipe_items',
+  'platform_commissions', 'locations',
+];
 
 export interface LocationOption {
   id: string;
@@ -151,8 +157,12 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!businessId || !locationId) return;
     let running = false;
+    let again = false;
     const run = async () => {
-      if (running) return;
+      if (running) {
+        again = true; // llegó otro cambio mientras sincronizaba: repetir al terminar
+        return;
+      }
       running = true;
       try {
         const res = await pushOutbox(db);
@@ -162,16 +172,45 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
         await pullLocationActivity(db, businessId, locationId);
         setSyncTick((n) => n + 1);
       } catch {
-        // Sin internet: se intenta otra vez en un minuto.
+        // Sin internet: se intenta otra vez más tarde.
       } finally {
         running = false;
+        if (again) {
+          again = false;
+          soon();
+        }
       }
     };
+    // Varios avisos seguidos (una venta son varias filas) se juntan en una sola sincronización.
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    const soon = () => {
+      clearTimeout(pending);
+      pending = setTimeout(run, 700);
+    };
+
+    // 1) Lo que se hace en este equipo se sube al instante.
+    const offLocal = onLocalChange(soon);
+    // 2) Lo que se hace en otro equipo o en el panel llega al instante (Supabase Realtime).
+    const channel = supabase?.channel(`yoli-${businessId}`);
+    if (channel) {
+      for (const table of REALTIME_TABLES) {
+        channel.on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table, ...(table === 'recipe_items' ? {} : { filter: `business_id=eq.${businessId}` }) },
+          soon,
+        );
+      }
+      channel.subscribe();
+    }
+    // 3) Por si acaso (sin internet, avisos perdidos): cada minuto y al volver a la app.
     const timer = setInterval(run, 60_000);
     const sub = AppState.addEventListener('change', (s) => s === 'active' && run());
     return () => {
+      clearTimeout(pending);
       clearInterval(timer);
       sub.remove();
+      offLocal();
+      if (channel) void supabase?.removeChannel(channel);
     };
   }, [db, businessId, locationId]);
 
