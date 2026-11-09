@@ -47,6 +47,20 @@ Se abre en el navegador (http://localhost:8081) con menú lateral. Entra con el 
 
 Para tener una dirección fija en internet (sin dejar la PC con PowerShell abierto), se puede publicar en Netlify: el archivo `netlify.toml` ya trae la configuración (`npm run build:web` genera la carpeta `dist`).
 
+## Publicar la app
+
+**Android (APK):** con una cuenta gratis de https://expo.dev:
+
+```bash
+npm install -g eas-cli
+eas login
+npm run apk
+```
+
+Al terminar (10–20 min) EAS da un enlace para descargar el `.apk` e instalarlo en cada teléfono o tablet.
+
+**Laptop / PC (navegador):** `npm run build:web` crea la carpeta `dist`. Arrástrala a https://app.netlify.com/drop y Netlify da una dirección web. Los archivos `public/_headers` y `_redirects` ya traen la configuración necesaria.
+
 ## Conectar la nube (Supabase)
 
 1. Crea un proyecto gratis en https://supabase.com

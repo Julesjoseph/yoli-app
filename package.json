@@ -49,7 +49,8 @@
     "typecheck": "tsc --noEmit",
     "test:db": "psql -q -v ON_ERROR_STOP=1 -f supabase/tests/supabase_mock.sql -f supabase/migrations/0001_esquema_inicial.sql -f supabase/migrations/0002_negocio_y_personal.sql -f supabase/migrations/0004_precios_delivery_descuentos.sql -f supabase/migrations/0005_efectivo_devuelta.sql -f supabase/tests/rls_test.sql",
     "pc": "expo start --web",
-    "build:web": "expo export --platform web"
+    "build:web": "expo export --platform web",
+    "apk": "eas build --platform android --profile apk"
   },
   "private": true
 }
