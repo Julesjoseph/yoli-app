@@ -33,6 +33,9 @@ interface CartState {
   setPayment(p: PaymentMethod): void;
   setExternalRef(s: string): void;
   setDiscount(d: Discount): void;
+  /** Efectivo que entregó el cliente (texto tal como se escribió). */
+  cashReceived: string;
+  setCashReceived(s: string): void;
 }
 
 const CartContext = createContext<CartState | null>(null);
@@ -44,6 +47,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [payment, setPayment] = useState<PaymentMethod>('efectivo');
   const [externalRef, setExternalRef] = useState('');
   const [discount, setDiscount] = useState<Discount>({ kind: 'pct', value: 0 });
+  const [cashReceived, setCashReceived] = useState('');
 
   const lines = Object.values(items);
   const totals = useMemo(() => {
@@ -87,11 +91,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setItems({});
       setExternalRef('');
       setDiscount({ kind: 'pct', value: 0 });
+      setCashReceived('');
     },
     setChannel,
     setPayment,
     setExternalRef,
     setDiscount,
+    cashReceived,
+    setCashReceived,
   };
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

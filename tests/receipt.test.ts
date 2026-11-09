@@ -30,3 +30,9 @@ test('ticket: sin propina no muestra la línea', () => {
   const html = buildReceiptHtml({ ...order, tip_law: 0 }, { businessName: 'Yoli', locationName: 'Centro' }, settings);
   assert.doesNotMatch(html, /Propina/);
 });
+
+test('ticket: muestra efectivo recibido y devuelta', () => {
+  const html = buildReceiptHtml({ ...order, cash_received: 500, change_given: 180 }, { businessName: 'Yoli', locationName: 'Centro' }, settings);
+  assert.match(html, /Recibido<\/td><td class="r">RD\$ 500\.00/);
+  assert.match(html, /Devuelta<\/td><td class="r b">RD\$ 180\.00/);
+});

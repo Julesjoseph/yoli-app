@@ -19,6 +19,9 @@ export interface TicketOrder {
   tip_law: number;
   total: number;
   payment_method: string;
+  /** Efectivo que entregó el cliente y su devuelta (si se registró). */
+  cash_received?: number | null;
+  change_given?: number | null;
   created_at: string;
   items: { name: string; unit_price: number; quantity: number }[];
 }
@@ -89,6 +92,8 @@ ${order.discount ? `<tr><td>Descuento</td><td class="r">-${money(order.discount)
 ${order.tip_law > 0 ? `<tr><td>Propina legal 10%</td><td class="r">${money(order.tip_law)}</td></tr>` : ''}
 <tr><td class="big">TOTAL</td><td class="r big">${money(order.total)}</td></tr>
 <tr><td>Pago</td><td class="r">${esc(PAYMENT_LABELS[order.payment_method] ?? order.payment_method)}</td></tr>
+${order.cash_received ? `<tr><td>Recibido</td><td class="r">${money(order.cash_received)}</td></tr>
+<tr><td class="b">Devuelta</td><td class="r b">${money(order.change_given ?? 0)}</td></tr>` : ''}
 </table>
 <hr>
 ${s.footer ? `<div class="c">${esc(s.footer)}</div>` : ''}
@@ -97,3 +102,18 @@ ${s.footer ? `<div class="c">${esc(s.footer)}</div>` : ''}
 </body></html>`;
 }
 
+
+/** Largo aproximado del ticket en mm, para generar la página del tamaño justo. */
+export function estimateTicketHeightMm(order: TicketOrder, s: TicketSettings) {
+  const font = s.width === '58' ? 11 : 13;
+  const lineMm = (font * 1.45 * 25.4) / 96;
+  const nameChars = s.width === '58' ? 24 : 34;
+  const itemLines = order.items.reduce((n, i) => n + 1 + Math.ceil(i.name.length / nameChars), 0);
+  const lines =
+    3 + [s.rnc, s.address, s.phone].filter(Boolean).length + // encabezado
+    5 + (order.external_ref ? 1 : 0) + // datos de la orden
+    itemLines +
+    5 + (order.discount ? 1 : 0) + (order.tip_law ? 1 : 0) + (order.cash_received ? 2 : 0) + // totales
+    4; // pie
+  return Math.ceil(lines * lineMm + 4 * 4 + 6 + 8);
+}

@@ -8,7 +8,7 @@ import { loadSampleCatalog } from './catalog';
  * Las columnas tienen los mismos nombres que en Supabase para que la
  * sincronización envíe las filas tal cual.
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export async function migrate(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -23,6 +23,13 @@ export async function migrate(db: SQLiteDatabase) {
         ALTER TABLE products ADD COLUMN price_pedidosya REAL;
         ALTER TABLE products ADD COLUMN price_ubereats REAL;
         ALTER TABLE orders ADD COLUMN discount REAL NOT NULL DEFAULT 0;
+      `);
+    }
+    // v4: efectivo recibido y devuelta
+    if (current < 4) {
+      await db.execAsync(`
+        ALTER TABLE orders ADD COLUMN cash_received REAL;
+        ALTER TABLE orders ADD COLUMN change_given REAL;
       `);
     }
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
@@ -68,7 +75,7 @@ export async function migrate(db: SQLiteDatabase) {
       external_ref TEXT, status TEXT NOT NULL DEFAULT 'pagada', subtotal REAL NOT NULL, itbis REAL NOT NULL,
       tip_law REAL NOT NULL DEFAULT 0, total REAL NOT NULL, platform_commission REAL NOT NULL DEFAULT 0,
       net_income REAL NOT NULL, payment_method TEXT, created_at TEXT NOT NULL,
-      discount REAL NOT NULL DEFAULT 0
+      discount REAL NOT NULL DEFAULT 0, cash_received REAL, change_given REAL
     );
     CREATE INDEX IF NOT EXISTS orders_by_date ON orders (location_id, created_at);
     CREATE TABLE IF NOT EXISTS order_items (

@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { getSetting, setSettings } from '@/db/database';
 import { CHANNEL_LABELS, type Channel } from '@/lib/calc';
 
-import { buildReceiptHtml, type TicketOrder as BaseOrder, type TicketSettings } from './receipt-html';
+import { buildReceiptHtml, estimateTicketHeightMm, type TicketOrder as BaseOrder, type TicketSettings } from './receipt-html';
 
 export { ticketNumber, type TicketSettings } from './receipt-html';
 export type TicketOrder = BaseOrder & { channel: Channel };
@@ -51,7 +51,7 @@ export function saveTicketSettings(db: SQLiteDatabase, s: TicketSettings) {
 
 export async function getTicketOrder(db: SQLiteDatabase, orderId: string): Promise<TicketOrder | null> {
   const o = await db.getFirstAsync<Omit<TicketOrder, 'items'>>(
-    'SELECT id, channel, external_ref, subtotal, discount, itbis, tip_law, total, payment_method, created_at FROM orders WHERE id = ?',
+    'SELECT id, channel, external_ref, subtotal, discount, itbis, tip_law, total, payment_method, created_at, cash_received, change_given FROM orders WHERE id = ?',
     [orderId],
   );
   if (!o) return null;
@@ -71,13 +71,12 @@ export async function printOrderTicket(
   const [order, settings] = await Promise.all([getTicketOrder(db, orderId), getTicketSettings(db)]);
   if (!order) throw new Error('No se encontró la orden.');
   const html = buildReceiptHtml(order, { ...shop, channelLabel: CHANNEL_LABELS[order.channel] }, settings);
-  await printHtml(html, settings.width);
+  await printHtml(html, settings.width, estimateTicketHeightMm(order, settings));
 }
 
 /** Ticket de prueba para revisar el tamaño y los datos del negocio. */
 export async function printTestTicket(shop: { businessName: string; locationName: string }, settings: TicketSettings) {
-  const html = buildReceiptHtml(
-    {
+  const order: BaseOrder = {
       id: '000000-prueba',
       channel: 'local',
       external_ref: null,
@@ -88,21 +87,27 @@ export async function printTestTicket(shop: { businessName: string; locationName
       payment_method: 'efectivo',
       created_at: new Date().toISOString(),
       items: [{ name: 'Producto de prueba', unit_price: 295, quantity: 1 }],
-    },
-    { ...shop, channelLabel: CHANNEL_LABELS.local },
-    settings,
-  );
-  await printHtml(html, settings.width);
+      cash_received: 500,
+      change_given: 180,
+  };
+  const html = buildReceiptHtml(order, { ...shop, channelLabel: CHANNEL_LABELS.local }, settings);
+  await printHtml(html, settings.width, estimateTicketHeightMm(order, settings));
 }
 
 /**
  * Imprime solo el ticket. En el navegador de la PC, `expo-print` imprimiría la
  * pantalla completa, así que el ticket se imprime desde un marco oculto.
  */
-async function printHtml(html: string, width: TicketSettings['width']) {
+async function printHtml(html: string, width: TicketSettings['width'], heightMm: number) {
   if (Platform.OS !== 'web') {
+    // En el teléfono se crea primero un PDF del tamaño del ticket (no tamaño carta)
+    // y luego se manda a imprimir, así la impresora térmica lo recibe a su medida.
     const Print = await import('expo-print');
-    await Print.printAsync({ html, width: Math.round(((width === '58' ? 58 : 80) / 25.4) * 72) });
+    const pt = (mm: number) => Math.round((mm / 25.4) * 72);
+    const page = { width: pt(width === '58' ? 58 : 80), height: pt(heightMm) };
+    const sized = html.replace(/@page \{ size: [^;]+;/, `@page { size: ${width}mm ${heightMm}mm;`);
+    const { uri } = await Print.printToFileAsync({ html: sized, ...page });
+    await Print.printAsync({ uri, ...page });
     return;
   }
   const frame = document.createElement('iframe');
@@ -116,9 +121,9 @@ async function printHtml(html: string, width: TicketSettings['width']) {
   const win = frame.contentWindow!;
   // Página del ancho del papel y del largo exacto del ticket (sin hojas en blanco).
   const doc = frame.contentDocument!;
-  const heightMm = Math.ceil((doc.documentElement.scrollHeight * 25.4) / 96) + 8;
+  const pageMm = Math.ceil((doc.documentElement.scrollHeight * 25.4) / 96) + 8;
   const style = doc.createElement('style');
-  style.textContent = `@page { size: ${width}mm ${heightMm}mm; margin: 0; }`;
+  style.textContent = `@page { size: ${width}mm ${pageMm}mm; margin: 0; }`;
   doc.head.appendChild(style);
   win.focus();
   win.print();

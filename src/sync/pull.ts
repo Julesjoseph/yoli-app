@@ -89,7 +89,7 @@ export async function pullLocationActivity(db: SQLiteDatabase, businessId: strin
 
     await insertRows(db, 'orders', orders.map((o) => ({ ...o, discount: o.discount ?? 0 })), [
       'id', 'business_id', 'location_id', 'channel', 'external_ref', 'status', 'subtotal', 'itbis', 'tip_law', 'total',
-      'platform_commission', 'net_income', 'payment_method', 'created_at', 'discount',
+      'platform_commission', 'net_income', 'payment_method', 'created_at', 'discount', 'cash_received', 'change_given',
     ]);
     await insertRows(db, 'order_items', items, ['id', 'order_id', 'product_id', 'name', 'unit_price', 'quantity']);
     await insertRows(db, 'expenses', expenses, [

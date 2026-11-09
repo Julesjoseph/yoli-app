@@ -35,6 +35,9 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
   const t = useTheme();
   const [saving, setSaving] = useState(false);
   const isDelivery = DELIVERY_CHANNELS.includes(cart.channel);
+  const cashMode = !isDelivery && cart.payment === 'efectivo';
+  const received = cashMode ? Number(cart.cashReceived.replace(/,/g, '')) || 0 : 0;
+  const short = received > 0 && received < cart.totals.total;
 
   async function charge() {
     setSaving(true);
@@ -45,6 +48,7 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
         paymentMethod: isDelivery ? 'plataforma' : cart.payment,
         externalRef: cart.externalRef,
         discount: cart.totals.discount,
+        cashReceived: received || null,
       });
       cart.clear();
       onCharged?.();
@@ -58,7 +62,8 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
       if ((await getTicketSettings(db)).autoPrint) {
         print();
       } else {
-        Alert.alert('✅ Venta registrada', `Total ${formatRD(totals.total)}\nNeto para el negocio ${formatRD(totals.netIncome)}`, [
+        const change = received ? `\nRecibido ${formatRD(received)} · Devuelta ${formatRD(received - totals.total)}` : '';
+        Alert.alert('✅ Venta registrada', `Total ${formatRD(totals.total)}${change}`, [
           { text: 'Listo', style: 'cancel' },
           { text: 'Imprimir ticket', onPress: print },
         ]);
@@ -137,14 +142,51 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
         </Row>
       </Card>
 
+      {cashMode && cart.lines.length ? <CashBox total={cart.totals.total} /> : null}
+
       <Button
         size="lg"
         icon="check-circle"
         title={saving ? 'Guardando…' : `Cobrar ${formatRD(cart.totals.total)}`}
         onPress={charge}
-        disabled={cart.lines.length === 0 || saving}
+        disabled={cart.lines.length === 0 || saving || short}
       />
     </View>
+  );
+}
+
+/** Billetes dominicanos comunes para cobrar rápido. */
+const BILLS = [100, 200, 500, 1000, 2000];
+
+/** Cuánto entregó el cliente y cuánto se le devuelve. */
+function CashBox({ total }: { total: number }) {
+  const cart = useCart();
+  const t = useTheme();
+  const received = Number(cart.cashReceived.replace(/,/g, '')) || 0;
+  const change = received - total;
+  const options = [
+    { value: String(total), label: 'Exacto' },
+    ...BILLS.filter((b) => b > total).slice(0, 3).map((b) => ({ value: String(b), label: formatRD(b).replace('.00', '') })),
+  ];
+  return (
+    <Card style={{ gap: 10 }}>
+      <Label bold size={16}>Efectivo recibido</Label>
+      <Chips options={options} value={cart.cashReceived} onChange={cart.setCashReceived} />
+      <Field
+        label="El cliente entregó (RD$)"
+        icon="cash"
+        keyboardType="decimal-pad"
+        value={cart.cashReceived}
+        onChangeText={cart.setCashReceived}
+        placeholder="Opcional"
+      />
+      {received > 0 ? (
+        <View style={[styles.change, { backgroundColor: change < 0 ? t.dangerSoft : t.successSoft }]}>
+          <Label bold size={16} color={change < 0 ? t.danger : t.success}>{change < 0 ? 'Falta' : 'Devuelta'}</Label>
+          <Text style={{ color: change < 0 ? t.danger : t.success, fontSize: 26, fontWeight: '900' }}>{formatRD(Math.abs(change))}</Text>
+        </View>
+      ) : null}
+    </Card>
   );
 }
 
@@ -206,6 +248,7 @@ function DiscountPicker() {
 }
 
 const styles = StyleSheet.create({
+  change: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12 },
   line: { flexDirection: 'row', gap: 12, paddingVertical: 12 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 999, borderWidth: 1.5, paddingHorizontal: 10, paddingVertical: 5 },
 });

@@ -6,6 +6,7 @@ import {
   computeOrderTotals,
   ingredientUsage,
   priceFor,
+  round2,
   type Channel,
   type OrderForReport,
   type RecipeItem,
@@ -124,6 +125,8 @@ export async function recordSale(
     applyTipLaw?: boolean;
     /** Descuento en RD$ (con ITBIS). */
     discount?: number;
+    /** Efectivo que entregó el cliente (para calcular la devuelta). */
+    cashReceived?: number | null;
   },
 ) {
   const rates = await getCommissionRates(db, ctx.businessId);
@@ -160,19 +163,30 @@ export async function recordSale(
     payment_method: input.paymentMethod,
     created_at: now,
     discount: totals.discount,
+    cash_received: input.cashReceived ? round2(input.cashReceived) : null,
+    change_given: input.cashReceived ? round2(Math.max(0, input.cashReceived - totals.total)) : null,
   };
+  if (order.cash_received !== null && order.cash_received < totals.total) {
+    throw new Error('El efectivo recibido es menor que el total.');
+  }
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO orders (id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law,
-        total, platform_commission, net_income, payment_method, created_at, discount)
+        total, platform_commission, net_income, payment_method, created_at, discount, cash_received, change_given)
        VALUES ($id, $business_id, $location_id, $channel, $external_ref, $status, $subtotal, $itbis, $tip_law,
-        $total, $platform_commission, $net_income, $payment_method, $created_at, $discount)`,
+        $total, $platform_commission, $net_income, $payment_method, $created_at, $discount, $cash_received, $change_given)`,
       Object.fromEntries(Object.entries(order).map(([k, v]) => ['$' + k, v])),
     );
     // El descuento solo se sube si hay uno (así sigue funcionando aunque la nube aún no tenga esa columna).
-    const { discount, ...rest } = order;
-    await enqueue(db, 'orders', discount > 0 ? order : rest, ctx);
+    // Las columnas nuevas solo se suben si tienen valor (así funciona aunque la nube aún no las tenga).
+    const cloudOrder: Record<string, unknown> = { ...order };
+    if (!order.discount) delete cloudOrder.discount;
+    if (order.cash_received === null) {
+      delete cloudOrder.cash_received;
+      delete cloudOrder.change_given;
+    }
+    await enqueue(db, 'orders', cloudOrder, ctx);
 
     for (const l of input.lines) {
       const item = {
