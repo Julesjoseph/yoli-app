@@ -22,7 +22,7 @@ test('ticket: datos, totales y texto escapado', () => {
   assert.match(html, /RD\$ 320\.00/);
   assert.match(html, /Propina legal 10%/);
   assert.match(html, /Café &lt;con&gt; leche/);
-  assert.match(html, /size: 58mm auto/);
+  assert.match(html, /size: 58mm /);
   assert.equal(ticketNumber(order.id), 'ABCDEF12'.slice(-6));
 });
 

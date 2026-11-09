@@ -1,4 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { Platform } from 'react-native';
 
 import { getSetting, setSettings } from '@/db/database';
 import { CHANNEL_LABELS, type Channel } from '@/lib/calc';
@@ -67,16 +68,14 @@ export async function printOrderTicket(
   orderId: string,
   shop: { businessName: string; locationName: string; cashier?: string },
 ) {
-  const Print = await import('expo-print');
   const [order, settings] = await Promise.all([getTicketOrder(db, orderId), getTicketSettings(db)]);
   if (!order) throw new Error('No se encontró la orden.');
   const html = buildReceiptHtml(order, { ...shop, channelLabel: CHANNEL_LABELS[order.channel] }, settings);
-  await Print.printAsync({ html, width: Math.round(((settings.width === '58' ? 58 : 80) / 25.4) * 72) });
+  await printHtml(html, settings.width);
 }
 
 /** Ticket de prueba para revisar el tamaño y los datos del negocio. */
 export async function printTestTicket(shop: { businessName: string; locationName: string }, settings: TicketSettings) {
-  const Print = await import('expo-print');
   const html = buildReceiptHtml(
     {
       id: '000000-prueba',
@@ -93,5 +92,36 @@ export async function printTestTicket(shop: { businessName: string; locationName
     { ...shop, channelLabel: CHANNEL_LABELS.local },
     settings,
   );
-  await Print.printAsync({ html, width: Math.round(((settings.width === '58' ? 58 : 80) / 25.4) * 72) });
+  await printHtml(html, settings.width);
+}
+
+/**
+ * Imprime solo el ticket. En el navegador de la PC, `expo-print` imprimiría la
+ * pantalla completa, así que el ticket se imprime desde un marco oculto.
+ */
+async function printHtml(html: string, width: TicketSettings['width']) {
+  if (Platform.OS !== 'web') {
+    const Print = await import('expo-print');
+    await Print.printAsync({ html, width: Math.round(((width === '58' ? 58 : 80) / 25.4) * 72) });
+    return;
+  }
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  Object.assign(frame.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
+  document.body.appendChild(frame);
+  await new Promise<void>((resolve) => {
+    frame.onload = () => resolve();
+    frame.srcdoc = html;
+  });
+  const win = frame.contentWindow!;
+  // Página del ancho del papel y del largo exacto del ticket (sin hojas en blanco).
+  const doc = frame.contentDocument!;
+  const heightMm = Math.ceil((doc.documentElement.scrollHeight * 25.4) / 96) + 8;
+  const style = doc.createElement('style');
+  style.textContent = `@page { size: ${width}mm ${heightMm}mm; margin: 0; }`;
+  doc.head.appendChild(style);
+  win.focus();
+  win.print();
+  // Se quita el marco cuando se cierra la ventana de imprimir.
+  setTimeout(() => frame.remove(), 60_000);
 }

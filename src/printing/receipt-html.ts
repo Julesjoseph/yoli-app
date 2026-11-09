@@ -56,8 +56,9 @@ export function buildReceiptHtml(
     .join('');
 
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-@page { size: ${width}mm auto; margin: 0; }
+@page { size: ${width}mm 200mm; margin: 0; }
 * { box-sizing: border-box; }
+html, body { height: auto; overflow: hidden; }
 body { margin: 0; padding: 3mm; width: ${width}mm; font-family: 'Courier New', monospace; font-size: ${font}px; color: #000; }
 .c { text-align: center; } .r { text-align: right; white-space: nowrap; } .b { font-weight: bold; }
 .big { font-size: ${font + 5}px; font-weight: bold; } .muted { color: #000; }
@@ -90,7 +91,7 @@ ${order.tip_law > 0 ? `<tr><td>Propina legal 10%</td><td class="r">${money(order
 <hr>
 ${s.footer ? `<div class="c">${esc(s.footer)}</div>` : ''}
 <div class="c" style="margin-top:4px">Este documento no es un comprobante fiscal</div>
-<div style="height:10mm"></div>
+<div style="height:6mm"></div>
 </body></html>`;
 }
 
