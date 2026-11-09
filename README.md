@@ -27,13 +27,13 @@ npx expo start
 
 Escanea el código QR con la app **Expo Go** en tu teléfono o tablet. La primera vez se cargan productos e insumos de ejemplo.
 
-Sin Supabase configurado, la app arranca en **modo demo**: un solo local con datos de ejemplo y sin inicio de sesión.
+La app ya apunta al proyecto de Supabase del negocio (`src/sync/config.ts`). Para probar en **modo demo** (un local con datos de ejemplo, sin inicio de sesión), crea un `.env` con `EXPO_PUBLIC_SUPABASE_URL=` vacío.
 
 ## Conectar la nube (Supabase)
 
 1. Crea un proyecto gratis en https://supabase.com
 2. En *SQL Editor*, ejecuta en orden los archivos de `supabase/migrations/` (`0001_…` y luego `0002_…`).
-3. Copia `.env.example` como `.env` y pon la URL y la anon key del proyecto (Project Settings > API).
+3. Pon la URL y la clave *publishable* del proyecto en `src/sync/config.ts` (Project Settings > API Keys). Nunca la clave *secret*.
 4. Abre la app, toca **Crear cuenta**, y luego **Crear negocio**. Quedas como dueño.
 
 ### Personal y roles
