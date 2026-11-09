@@ -110,3 +110,24 @@ supabase/tests/     Pruebas de seguridad del servidor (npm run test:db, requiere
 - Cierre de caja diario
 - Importar reportes de PedidosYa y Uber Eats (CSV)
 - Conectar el proveedor de e-CF elegido
+
+## PedidosYa automático (Partner API)
+
+Los pedidos de PedidosYa pueden entrar solos como ventas del canal "PedidosYa":
+
+1. Correr `supabase/migrations/0007_pedidosya_automatico.sql` en el SQL Editor.
+2. Publicar el receptor (una vez, desde la PC):
+   ```
+   npx supabase login
+   npx supabase link --project-ref opwtnfflzdybdtvluedt
+   npx supabase secrets set PEDIDOSYA_WEBHOOK_TOKEN=una-clave-larga-que-inventes
+   npx supabase functions deploy pedidosya-webhook --no-verify-jwt
+   ```
+3. En el portal de PedidosYa (o con el ejecutivo de cuenta) registrar el webhook de pedidos:
+   - URL: `https://opwtnfflzdybdtvluedt.supabase.co/functions/v1/pedidosya-webhook`
+   - Token estático: la misma clave de `PEDIDOSYA_WEBHOOK_TOKEN`.
+4. Enlazar la tienda de PedidosYa con el local de YOLI (tabla `delivery_links`).
+
+Los productos se unen por SKU (= id del producto en YOLI) o por nombre igual. Cada aviso
+queda en `delivery_events` con su resultado, para revisar si algo no entró.
+Prueba local: `supabase/tests/pedidosya_test.sql`.
