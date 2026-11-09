@@ -1,5 +1,6 @@
 // Netlify (arrastrar y soltar) ignora las carpetas llamadas "node_modules"
-// y también las que empiezan con "@" (como "@expo", donde están los íconos).
+// y también las que empiezan con "@" (como "@expo"). Las fuentes de los íconos
+// se ponen en "fonts/" para que la ruta sea corta.
 // Aquí se renombran ("assets/node_modules" -> "assets/nm", "@expo" -> "scope-expo")
 // y se actualizan las referencias en los archivos de la app.
 const fs = require('fs');
@@ -31,6 +32,15 @@ const walk = (dir) =>
     const p = path.join(dir, e.name);
     return e.isDirectory() ? walk(p) : [p];
   });
+// Las fuentes (íconos) se mueven a una carpeta corta "fonts/" en la raíz.
+for (const file of fs.existsSync(nm) ? walk(nm).filter((f) => /\.(ttf|otf|woff2?)$/.test(f)) : []) {
+  const rel = path.relative(dist, file).split(path.sep).join('/');
+  const target = `fonts/${path.basename(file)}`;
+  fs.mkdirSync(path.join(dist, 'fonts'), { recursive: true });
+  fs.renameSync(file, path.join(dist, target));
+  replacements.push([rel, target]);
+}
+
 let fixed = 0;
 for (const file of walk(dist).filter((f) => /\.(js|html|json|css)$/.test(f))) {
   const text = fs.readFileSync(file, 'utf8');
