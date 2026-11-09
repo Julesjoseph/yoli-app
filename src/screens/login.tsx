@@ -10,6 +10,8 @@ import { Logo } from '@/components/logo';
 import { Button, Card, Chips, Field, Icon, Label } from '@/components/ui';
 import { Mamey } from '@/constants/theme';
 import { pendingSyncCount } from '@/db/repo';
+import { DEMO_EMAIL, DEMO_PASSWORD } from '@/sync/config';
+import { supabase } from '@/sync/supabase';
 import { useTheme } from '@/hooks/use-theme';
 
 const FEATURES = [
@@ -36,7 +38,12 @@ export function LoginScreen() {
       setMsg(`Hay ${pending} cambios de tu negocio sin subir. Entra con tu cuenta y sincroniza antes de usar el demo.`);
       return;
     }
-    await auth.enterDemo();
+    setBusy(true);
+    setMsg('');
+    // Demo en la nube (se ve igual en la PC y en los teléfonos). Sin internet, demo en este equipo.
+    const error = supabase ? await auth.signIn(DEMO_EMAIL, DEMO_PASSWORD) : 'sin nube';
+    setBusy(false);
+    if (error) await auth.enterDemo();
   }
 
   async function submit() {
@@ -118,9 +125,9 @@ export function LoginScreen() {
                 disabled={busy || !email || !password || (mode === 'registro' && !name)}
               />
             </Card>
-            <Button variant="secondary" icon="play-circle-outline" title="Probar demo (sin cuenta)" onPress={tryDemo} />
+            <Button variant="secondary" icon="play-circle-outline" title={busy ? 'Un momento…' : 'Probar demo (sin cuenta)'} onPress={tryDemo} disabled={busy} />
             <Label muted size={13} style={{ textAlign: 'center', paddingHorizontal: 12 }}>
-              El demo usa un negocio de ejemplo guardado solo en este equipo. No toca tus datos reales.
+              El demo es un negocio de ejemplo aparte, con datos de prueba. Nunca toca tus datos reales.
             </Label>
             {mode === 'registro' ? (
               <Label muted size={14} style={{ textAlign: 'center', paddingHorizontal: 12 }}>

@@ -7,3 +7,11 @@
  */
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://opwtnfflzdybdtvluedt.supabase.co';
 export const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_publishable_TJwfEsl_4aoIYAr4edj9IQ_PIjeOQnC';
+
+/**
+ * Cuenta de demostración en la nube (un negocio aparte, con datos de prueba).
+ * Es pública a propósito: solo tiene acceso al "Negocio demo", nunca a los datos reales.
+ * Se crea en Supabase con supabase/demo-en-la-nube.sql.
+ */
+export const DEMO_EMAIL = 'demo@yoli.app';
+export const DEMO_PASSWORD = 'YoliDemo-2026';
