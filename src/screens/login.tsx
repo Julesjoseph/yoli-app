@@ -1,3 +1,4 @@
+import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +7,7 @@ import { useAuth } from '@/auth/auth';
 import { Logo } from '@/components/logo';
 import { Button, Card, Chips, Field, Icon, Label } from '@/components/ui';
 import { Mamey } from '@/constants/theme';
+import { pendingSyncCount } from '@/db/repo';
 import { useTheme } from '@/hooks/use-theme';
 
 const FEATURES = [
@@ -16,6 +18,7 @@ const FEATURES = [
 
 export function LoginScreen() {
   const auth = useAuth();
+  const db = useSQLiteContext();
   const t = useTheme();
   const [mode, setMode] = useState<'entrar' | 'registro'>('entrar');
   const [name, setName] = useState('');
@@ -23,6 +26,16 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+
+  async function tryDemo() {
+    // El demo usa datos de ejemplo en este equipo: no se entra si hay ventas reales sin subir.
+    const pending = await pendingSyncCount(db).catch(() => 0);
+    if (pending > 0) {
+      setMsg(`Hay ${pending} cambios de tu negocio sin subir. Entra con tu cuenta y sincroniza antes de usar el demo.`);
+      return;
+    }
+    await auth.enterDemo();
+  }
 
   async function submit() {
     setBusy(true);
@@ -103,6 +116,10 @@ export function LoginScreen() {
                 disabled={busy || !email || !password || (mode === 'registro' && !name)}
               />
             </Card>
+            <Button variant="secondary" icon="play-circle-outline" title="Probar demo (sin cuenta)" onPress={tryDemo} />
+            <Label muted size={13} style={{ textAlign: 'center', paddingHorizontal: 12 }}>
+              El demo usa un negocio de ejemplo guardado solo en este equipo. No toca tus datos reales.
+            </Label>
             {mode === 'registro' ? (
               <Label muted size={14} style={{ textAlign: 'center', paddingHorizontal: 12 }}>
                 ¿Eres empleado? Crea tu cuenta y pide al dueño que te agregue desde Ajustes.

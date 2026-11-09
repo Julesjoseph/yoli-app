@@ -63,6 +63,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
     const set = (p: Phase) => !cancelled && setPhase(p);
 
     (async () => {
+      if (auth.loading) return set({ kind: 'loading' });
       if (auth.demo) {
         await ensureDemoData(db);
         const ctx = await getContext(db);

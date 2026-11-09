@@ -1,11 +1,16 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { supabase } from '@/sync/supabase';
 
 interface AuthState {
-  /** true cuando no hay Supabase configurado: la app funciona sola con datos de ejemplo. */
+  /** true en modo demo: datos de ejemplo solo en este equipo, sin cuenta ni nube. */
   demo: boolean;
+  /** Entrar al modo demo desde la pantalla de inicio de sesión. */
+  enterDemo(): Promise<void>;
+  /** Salir del modo demo y volver a la pantalla de inicio de sesión. */
+  exitDemo(): Promise<void>;
   loading: boolean;
   session: Session | null;
   signIn(email: string, password: string): Promise<string | null>;
@@ -14,6 +19,7 @@ interface AuthState {
 }
 
 const AuthContext = createContext<AuthState | null>(null);
+const DEMO_KEY = 'yoli_demo';
 
 const traducir = (msg: string) => {
   if (/invalid login credentials/i.test(msg)) return 'Correo o contraseña incorrectos.';
@@ -27,6 +33,13 @@ const traducir = (msg: string) => {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(!!supabase);
+  const [demoChosen, setDemoChosen] = useState<boolean | null>(supabase ? null : true);
+
+  useEffect(() => {
+    AsyncStorage.getItem(DEMO_KEY)
+      .then((v) => setDemoChosen(!supabase || v === '1'))
+      .catch(() => setDemoChosen(!supabase));
+  }, []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -40,9 +53,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value: AuthState = {
-    demo: !supabase,
-    loading,
-    session,
+    demo: !!demoChosen,
+    loading: loading || demoChosen === null,
+    session: demoChosen ? null : session,
+    async enterDemo() {
+      await AsyncStorage.setItem(DEMO_KEY, '1').catch(() => undefined);
+      setDemoChosen(true);
+    },
+    async exitDemo() {
+      if (!supabase) return;
+      await AsyncStorage.removeItem(DEMO_KEY).catch(() => undefined);
+      setDemoChosen(false);
+    },
     async signIn(email, password) {
       if (!supabase) return null;
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });

@@ -16,6 +16,9 @@ export async function pushOutbox(db: SQLiteDatabase): Promise<SyncResult> {
   const pending = async () =>
     (await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM outbox'))?.n ?? 0;
   if (!supabase) return { pushed: 0, pending: await pending(), offlineMode: true };
+  // Los datos del modo demo nunca se suben a la nube.
+  const mode = await db.getFirstAsync<{ value: string }>("SELECT value FROM app_settings WHERE key = 'mode'");
+  if (mode?.value === 'demo') return { pushed: 0, pending: await pending(), offlineMode: true };
 
   const rows = await db.getAllAsync<{ seq: number; table_name: string; payload: string }>(
     'SELECT seq, table_name, payload FROM outbox ORDER BY seq LIMIT ?',

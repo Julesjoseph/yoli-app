@@ -122,9 +122,9 @@ export default function SettingsScreen() {
             <Pill text="DEMO" color={t.info} />
           </Row>
           <Label muted size={14}>
-            La app está usando datos de ejemplo guardados solo en este equipo. Para usar varios locales, personal e
-            inicio de sesión, conecta Supabase (ver README).
+            Estás usando un negocio de ejemplo guardado solo en este equipo. Nada de esto se sube a tu cuenta real.
           </Label>
+          {supabase ? <Button icon="logout" title="Salir del demo" variant="secondary" onPress={auth.exitDemo} /> : null}
         </Card>
       ) : null}
 
