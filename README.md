@@ -4,6 +4,9 @@ App móvil (Android, iPhone y tablet) para manejar un negocio de comida rápida,
 
 ## Qué hace esta primera versión
 
+- **Inicio:** panel con ventas y ganancia del día, accesos rápidos, alertas de stock y últimas ventas.
+- **Catálogo:** crear y editar productos, precios, ITBIS, categorías, insumos y recetas (con costo y margen). Botón para cargar un menú de ejemplo.
+
 - **Caja (POS):** menú por categorías, órdenes de comedor, para llevar, PedidosYa y Uber Eats. Calcula ITBIS 18% (incluido en el precio) y el 10% de ley de propina en comedor. En tablet muestra el menú y la orden lado a lado.
 - **PedidosYa y Uber Eats:** cada pedido guarda su número y descuenta la comisión de la plataforma (25% y 30% de ejemplo, configurables) para ver el ingreso real.
 - **Inventario:** insumos con stock mínimo y recetas. Cada venta descuenta los ingredientes automáticamente. Entradas por compra, mermas y ajustes.
@@ -58,7 +61,9 @@ Los permisos se aplican también en el servidor (RLS de Postgres), no solo en la
 ## Estructura
 
 ```
-src/app/            Pantallas: index (Caja), inventario, gastos, reportes
+src/app/(tabs)/     Pestañas: Inicio, Caja, Inventario, Reportes, Ajustes
+src/app/catalogo/   Catálogo de productos, insumos y recetas
+src/app/gastos.tsx  Gastos
 src/lib/calc.ts     Cálculos de ITBIS, propina, comisiones, recetas y ganancia (con pruebas)
 src/db/             Base de datos local y consultas
 src/sync/           Subida de la cola local a Supabase
@@ -72,7 +77,7 @@ supabase/tests/     Pruebas de seguridad del servidor (npm run test:db, requiere
 
 ## Próximos pasos
 
-- Editar menú, recetas y precios distintos por plataforma
+- Precios distintos por plataforma de delivery
 - Cierre de caja diario
 - Importar reportes de PedidosYa y Uber Eats (CSV)
 - Conectar el proveedor de e-CF elegido

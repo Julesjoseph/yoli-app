@@ -1,6 +1,7 @@
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/auth';
 import { Button, Card, Chips, Field, HeroCard, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle } from '@/components/ui';
@@ -96,6 +97,27 @@ export default function SettingsScreen() {
         </Card>
       ) : null}
 
+      {manager ? (
+        <Card style={{ gap: 0, paddingVertical: 6 }}>
+          {[
+            { icon: 'book-open-variant' as const, label: 'Catálogo', hint: 'Productos, precios, insumos y recetas', href: '/catalogo' as const, color: t.info },
+            { icon: 'receipt-text-outline' as const, label: 'Gastos', hint: 'Compras, nómina y servicios', href: '/gastos' as const, color: t.accent },
+          ].map((item, i) => (
+            <Pressable
+              key={item.label}
+              accessibilityRole="button"
+              onPress={() => router.push(item.href)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderColor: t.border }}>
+              <IconBadge name={item.icon} color={item.color} />
+              <View style={{ flex: 1 }}>
+                <Label bold size={16}>{item.label}</Label>
+                <Label muted size={13}>{item.hint}</Label>
+              </View>
+              <Icon name="chevron-right" color={t.textSecondary} />
+            </Pressable>
+          ))}
+        </Card>
+      ) : null}
       {manager ? <Commissions /> : null}
       {manager && !ctx.demo ? <Locations /> : null}
       {manager && !ctx.demo ? <Staff /> : null}

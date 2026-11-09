@@ -46,7 +46,7 @@ export default function ExpensesScreen() {
   }
 
   return (
-    <Screen title="Gastos" subtitle={ctx.locationName}>
+    <Screen back title="Gastos" subtitle={ctx.locationName}>
       <HeroCard>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Icon name="calendar-month" color="#FFFFFF" size={20} />

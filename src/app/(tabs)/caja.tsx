@@ -1,12 +1,13 @@
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { CHANNEL_ICONS, foodIcon } from '@/components/brand-icons';
-import { Button, Card, Chips, Divider, Field, Icon, IconBadge, Label, Row, Screen, useElevation } from '@/components/ui';
+import { Button, Card, Chips, Divider, EmptyState, Field, Icon, IconBadge, Label, Row, Screen, useElevation } from '@/components/ui';
 import { ChannelColors } from '@/constants/theme';
 import { listCategories, listProducts, recordSale, type PaymentMethod, type Product } from '@/db/repo';
-import { useBusiness, useFocusData } from '@/hooks/use-business';
+import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { CHANNEL_LABELS, computeOrderTotals, DELIVERY_CHANNELS, formatRD, type Channel } from '@/lib/calc';
 
@@ -92,6 +93,17 @@ export default function PosScreen() {
         value={category}
         onChange={setCategory}
       />
+      {data && data.products.length === 0 ? (
+        <Card style={{ alignItems: 'center' }}>
+          <EmptyState
+            icon="book-open-variant"
+            text={canManage(ctx) ? 'Todavía no tienes productos. Crea tu menú en el Catálogo.' : 'Todavía no hay productos. Pide al dueño que cree el menú.'}
+          />
+          {canManage(ctx) ? (
+            <Button icon="book-open-variant" title="Ir al Catálogo" onPress={() => router.push('/catalogo')} style={{ alignSelf: 'stretch' }} />
+          ) : null}
+        </Card>
+      ) : null}
       <View style={styles.grid}>
         {products.map((p) => {
           const qty = cart[p.id]?.quantity;

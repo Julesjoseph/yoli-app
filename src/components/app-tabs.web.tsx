@@ -18,9 +18,9 @@ export default function AppTabs({ role }: { role: Role }) {
         tabBarStyle: { backgroundColor: colors.backgroundElement, borderTopColor: colors.border },
         tabBarLabelStyle: { fontWeight: '700' },
       }}>
-      <Tabs.Screen name="index" options={{ title: 'Caja', tabBarIcon: icon('cash-register') }} />
+      <Tabs.Screen name="index" options={{ title: 'Inicio', tabBarIcon: icon('home-variant') }} />
+      <Tabs.Screen name="caja" options={{ title: 'Caja', tabBarIcon: icon('cash-register') }} />
       <Tabs.Screen name="inventario" options={{ title: 'Inventario', tabBarIcon: icon('package-variant') }} />
-      <Tabs.Screen name="gastos" options={{ title: 'Gastos', href: manager ? undefined : null, tabBarIcon: icon('receipt-text-outline') }} />
       <Tabs.Screen name="reportes" options={{ title: 'Reportes', href: manager ? undefined : null, tabBarIcon: icon('chart-box') }} />
       <Tabs.Screen name="ajustes" options={{ title: 'Ajustes', tabBarIcon: icon('cog') }} />
     </Tabs>

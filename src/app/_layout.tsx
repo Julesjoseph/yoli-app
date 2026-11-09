@@ -1,9 +1,8 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { useColorScheme } from 'react-native';
 
 import { AuthProvider } from '@/auth/auth';
-import AppTabs from '@/components/app-tabs';
 import { migrate } from '@/db/database';
 import { BusinessProvider, useBusinessState } from '@/hooks/use-business';
 import { ChooseLocationScreen } from '@/screens/choose-location';
@@ -25,7 +24,7 @@ function Gate() {
     case 'error':
       return <ErrorScreen message={phase.message} />;
     case 'ready':
-      return <AppTabs role={phase.ctx.role} />;
+      return <Stack screenOptions={{ headerShown: false }} />;
   }
 }
 

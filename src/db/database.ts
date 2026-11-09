@@ -1,6 +1,8 @@
 import { randomUUID } from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { loadSampleCatalog } from './catalog';
+
 /**
  * Base de datos local (SQLite) en el teléfono/tablet.
  * Las columnas tienen los mismos nombres que en Supabase para que la
@@ -121,61 +123,14 @@ export async function ensureDemoData(db: SQLiteDatabase) {
     [businessId, 'pedidosya', 0.25, businessId, 'ubereats', 0.3],
   );
 
-  const cat = (name: string, order: number) => ({ id: randomUUID(), name, order });
-  const cats = [cat('Comida rápida', 1), cat('Comedor', 2), cat('Cafetería', 3), cat('Bebidas', 4)];
-  for (const c of cats) {
-    await db.runAsync('INSERT INTO categories (id, business_id, name, sort_order) VALUES (?, ?, ?, ?)', [
-      c.id, businessId, c.name, c.order,
-    ]);
-  }
-
-  const ing = (name: string, unit: string, cost: number, min: number, initial: number) => ({
-    id: randomUUID(), name, unit, cost, min, initial,
+  await loadSampleCatalog(db, {
+    demo: true,
+    userId: 'demo',
+    role: 'dueno',
+    businessId,
+    businessName: 'Mi negocio (demo)',
+    locationId,
+    locationName: 'Local principal',
   });
-  const ingredients = {
-    pan: ing('Pan de hamburguesa', 'unidad', 15, 20, 60),
-    carne: ing('Carne molida', 'g', 0.45, 2000, 6000),
-    queso: ing('Queso', 'lonja', 8, 30, 80),
-    papas: ing('Papas', 'g', 0.08, 3000, 10000),
-    arroz: ing('Arroz', 'g', 0.06, 5000, 15000),
-    pollo: ing('Pollo', 'g', 0.25, 3000, 8000),
-    habichuelas: ing('Habichuelas', 'g', 0.1, 2000, 5000),
-    cafe: ing('Café molido', 'g', 1.2, 500, 1500),
-    leche: ing('Leche', 'ml', 0.07, 2000, 6000),
-    refresco: ing('Refresco lata', 'unidad', 35, 24, 48),
-  };
-  for (const i of Object.values(ingredients)) {
-    await db.runAsync(
-      'INSERT INTO ingredients (id, business_id, name, unit, cost_per_unit, min_stock) VALUES (?, ?, ?, ?, ?, ?)',
-      [i.id, businessId, i.name, i.unit, i.cost, i.min],
-    );
-    await db.runAsync(
-      `INSERT INTO inventory_movements (id, business_id, location_id, ingredient_id, quantity, reason, note, created_at)
-       VALUES (?, ?, ?, ?, ?, 'ajuste', 'Inventario inicial', ?)`,
-      [randomUUID(), businessId, locationId, i.id, i.initial, new Date().toISOString()],
-    );
-  }
-
-  const products: { name: string; price: number; cat: number; recipe: [keyof typeof ingredients, number][] }[] = [
-    { name: 'Hamburguesa clásica', price: 295, cat: 0, recipe: [['pan', 1], ['carne', 150], ['queso', 1]] },
-    { name: 'Papas fritas', price: 150, cat: 0, recipe: [['papas', 250]] },
-    { name: 'Combo hamburguesa', price: 425, cat: 0, recipe: [['pan', 1], ['carne', 150], ['queso', 1], ['papas', 200], ['refresco', 1]] },
-    { name: 'La bandera (arroz, habichuelas y pollo)', price: 275, cat: 1, recipe: [['arroz', 200], ['habichuelas', 150], ['pollo', 180]] },
-    { name: 'Pollo guisado con arroz', price: 250, cat: 1, recipe: [['arroz', 200], ['pollo', 200]] },
-    { name: 'Café', price: 75, cat: 2, recipe: [['cafe', 12]] },
-    { name: 'Café con leche', price: 110, cat: 2, recipe: [['cafe', 12], ['leche', 150]] },
-    { name: 'Refresco', price: 80, cat: 3, recipe: [['refresco', 1]] },
-  ];
-  for (const p of products) {
-    const id = randomUUID();
-    await db.runAsync(
-      'INSERT INTO products (id, business_id, category_id, name, price, itbis_rate) VALUES (?, ?, ?, ?, ?, 0.18)',
-      [id, businessId, cats[p.cat].id, p.name, p.price],
-    );
-    for (const [key, qty] of p.recipe) {
-      await db.runAsync('INSERT INTO recipe_items (product_id, ingredient_id, quantity) VALUES (?, ?, ?)', [
-        id, ingredients[key].id, qty,
-      ]);
-    }
-  }
+  await db.runAsync('DELETE FROM outbox'); // en demo no hay nube a la que subir
 }

@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, type ComponentProps, type ReactNode } from 'react';
 import {
@@ -45,7 +46,10 @@ export function Screen({
   scroll = true,
   right,
   footer,
+  back,
 }: {
+  /** Muestra una flecha para volver (pantallas que no son pestañas). */
+  back?: boolean;
   title: string;
   subtitle?: string;
   children: ReactNode;
@@ -65,6 +69,16 @@ export function Screen({
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: t.background }}>
       <View style={styles.header}>
+        {back ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Volver"
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+            hitSlop={8}
+            style={[styles.back, { backgroundColor: t.backgroundElement, borderColor: t.border }]}>
+            <Icon name="arrow-left" size={22} />
+          </Pressable>
+        ) : null}
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: t.text }]}>{title}</Text>
           {subtitle ? (
@@ -376,6 +390,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: { fontSize: 30, fontWeight: '800', letterSpacing: -0.8 },
+  back: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth },
   subtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   content: { padding: 16, gap: 14, paddingBottom: 56 },
   card: { borderRadius: 20, padding: 16, gap: 10, borderWidth: StyleSheet.hairlineWidth },

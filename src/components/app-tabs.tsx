@@ -3,7 +3,7 @@ import { NativeTabs } from 'expo-router/native-tabs';
 import type { Role } from '@/db/repo';
 import { useTheme } from '@/hooks/use-theme';
 
-/** Cajero y cocina ven Caja, Inventario y Ajustes. Dueño y gerente ven todo. */
+/** Cajero y cocina no ven Reportes. Gastos y Catálogo se abren desde Inicio o Ajustes. */
 export default function AppTabs({ role }: { role: Role }) {
   const colors = useTheme();
   const manager = role === 'dueno' || role === 'gerente';
@@ -13,16 +13,16 @@ export default function AppTabs({ role }: { role: Role }) {
       indicatorColor={colors.backgroundElement}
       labelStyle={{ selected: { color: colors.primary } }}>
       <NativeTabs.Trigger name="index">
+        <NativeTabs.Trigger.Label>Inicio</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="caja">
         <NativeTabs.Trigger.Label>Caja</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="cart.fill" md="point_of_sale" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="inventario">
         <NativeTabs.Trigger.Label>Inventario</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="shippingbox.fill" md="inventory_2" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="gastos" hidden={!manager}>
-        <NativeTabs.Trigger.Label>Gastos</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="creditcard.fill" md="payments" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reportes" hidden={!manager}>
         <NativeTabs.Trigger.Label>Reportes</NativeTabs.Trigger.Label>

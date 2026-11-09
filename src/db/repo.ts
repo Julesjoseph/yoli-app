@@ -323,3 +323,20 @@ export async function pendingSyncCount(db: SQLiteDatabase) {
   const r = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM outbox');
   return r?.n ?? 0;
 }
+
+export interface RecentOrder {
+  id: string;
+  channel: Channel;
+  total: number;
+  created_at: string;
+  items: number;
+}
+
+export const listRecentOrders = (db: SQLiteDatabase, ctx: Context, limit = 5) =>
+  db.getAllAsync<RecentOrder>(
+    `SELECT o.id, o.channel, o.total, o.created_at, COALESCE(SUM(oi.quantity), 0) AS items
+     FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.id
+     WHERE o.location_id = ? AND o.status = 'pagada'
+     GROUP BY o.id ORDER BY o.created_at DESC LIMIT ?`,
+    [ctx.locationId, limit],
+  );
