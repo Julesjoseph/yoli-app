@@ -8,7 +8,7 @@
     "scheme": "yoliapp",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.yoli.app"
     },
     "android": {
@@ -33,7 +33,7 @@
         {
           "backgroundColor": "#F26B1D",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 200
         }
       ],
       [
