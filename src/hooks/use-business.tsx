@@ -28,6 +28,8 @@ interface BusinessState {
   chooseLocation(loc: LocationOption): Promise<void>;
   changeLocation(): Promise<void>;
   createBusiness(name: string, rnc: string, locationName: string): Promise<string | null>;
+  /** Sube cada vez que llegan cambios de la nube: las pantallas se recargan solas. */
+  syncTick: number;
   reload(): void;
 }
 
@@ -55,6 +57,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [version, setVersion] = useState(0);
+  const [syncTick, setSyncTick] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   const userId = auth.session?.user.id;
 
@@ -140,20 +143,41 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   }, [db, auth.demo, auth.loading, userId, version]);
 
   // Sincronización automática cada minuto y al volver a la app.
-  const ready = phase.kind === 'ready' && !phase.ctx.demo;
+  // Sube lo de este equipo y baja lo que se cambió en otros (menú, precios,
+  // inventario, ventas), para que la PC y el teléfono se vean iguales.
+  const live = phase.kind === 'ready' && !phase.ctx.demo ? phase.ctx : null;
+  const businessId = live?.businessId;
+  const locationId = live?.locationId;
   useEffect(() => {
-    if (!ready) return;
-    const run = () => pushOutbox(db).catch(() => undefined);
+    if (!businessId || !locationId) return;
+    let running = false;
+    const run = async () => {
+      if (running) return;
+      running = true;
+      try {
+        const res = await pushOutbox(db);
+        // Solo se baja si no queda nada pendiente (así no se pisa lo que aún no subió).
+        if (res.error || res.pending > 0) return;
+        await pullCatalog(db, businessId);
+        await pullLocationActivity(db, businessId, locationId);
+        setSyncTick((n) => n + 1);
+      } catch {
+        // Sin internet: se intenta otra vez en un minuto.
+      } finally {
+        running = false;
+      }
+    };
     const timer = setInterval(run, 60_000);
     const sub = AppState.addEventListener('change', (s) => s === 'active' && run());
     return () => {
       clearInterval(timer);
       sub.remove();
     };
-  }, [db, ready]);
+  }, [db, businessId, locationId]);
 
   const value: BusinessState = {
     phase,
+    syncTick,
     reload,
     async chooseLocation(loc) {
       await setSettings(db, { location_id: loc.id, location_name: loc.name });
@@ -203,5 +227,10 @@ export function useFocusData<T>(load: () => Promise<T>, deps: unknown[]): [T | u
     load().then(setData);
   }, deps);
   useFocusEffect(reload);
+  // Recargar también cuando llegan cambios de otro equipo.
+  const syncTick = useContext(BusinessContext)?.syncTick ?? 0;
+  useEffect(() => {
+    if (syncTick) reload();
+  }, [syncTick, reload]);
   return [data, reload];
 }
