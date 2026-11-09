@@ -86,15 +86,21 @@ export default function CatalogScreen() {
           <Button icon="plus" title="Nuevo producto" onPress={() => router.push('/catalogo/producto')} />
           {products.length === 0 ? (
             <Card style={{ alignItems: 'center' }}>
-              <EmptyState icon="book-open-variant" text="Tu catálogo está vacío. Crea tus productos o empieza con un menú de ejemplo y luego ajústalo." />
-              <Button
-                variant="secondary"
-                icon="auto-fix"
-                title={busy ? 'Cargando…' : 'Cargar menú de ejemplo'}
-                onPress={loadSample}
-                disabled={busy}
-                style={{ alignSelf: 'stretch' }}
+              <EmptyState
+                icon="book-open-variant"
+                text={ctx.demo ? 'El catálogo del demo está vacío.' : 'Tu catálogo está vacío. Crea tu primer producto con el botón de arriba.'}
               />
+              {/* La cuenta real empieza sin datos; el menú de ejemplo es solo para el demo. */}
+              {ctx.demo ? (
+                <Button
+                  variant="secondary"
+                  icon="auto-fix"
+                  title={busy ? 'Cargando…' : 'Cargar menú de ejemplo'}
+                  onPress={loadSample}
+                  disabled={busy}
+                  style={{ alignSelf: 'stretch' }}
+                />
+              ) : null}
             </Card>
           ) : null}
           {[...categories.map((c) => ({ id: c.id as string | null, name: c.name })), { id: null, name: 'Sin categoría' }].map((c) => {

@@ -2,6 +2,7 @@ import { randomUUID } from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { loadSampleCatalog } from './catalog';
+import { loadDemoActivity } from './demo';
 
 /**
  * Base de datos local (SQLite) en el teléfono/tablet.
@@ -126,8 +127,11 @@ export async function setSettings(db: SQLiteDatabase, values: Record<string, str
 }
 
 /** Datos de ejemplo para probar la app sin conexión a la nube (modo demo). */
+const DEMO_DATA_VERSION = '2';
+
 export async function ensureDemoData(db: SQLiteDatabase) {
-  if ((await getSetting(db, 'mode')) === 'demo') return;
+  // Se vuelve a crear si el demo es de una versión anterior (sin ventas de prueba).
+  if ((await getSetting(db, 'mode')) === 'demo' && (await getSetting(db, 'demo_data')) === DEMO_DATA_VERSION) return;
   await resetLocalData(db);
 
   const businessId = randomUUID();
@@ -149,14 +153,17 @@ export async function ensureDemoData(db: SQLiteDatabase) {
     [businessId, 'pedidosya', 0.25, businessId, 'ubereats', 0.3],
   );
 
-  await loadSampleCatalog(db, {
+  const ctx = {
     demo: true,
     userId: 'demo',
-    role: 'dueno',
+    role: 'dueno' as const,
     businessId,
     businessName: 'Mi negocio (demo)',
     locationId,
     locationName: 'Local principal',
-  });
+  };
+  await loadSampleCatalog(db, ctx);
+  await loadDemoActivity(db, ctx);
+  await setSettings(db, { demo_data: DEMO_DATA_VERSION });
   await db.runAsync('DELETE FROM outbox'); // en demo no hay nube a la que subir
 }
