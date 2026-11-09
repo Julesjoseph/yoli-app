@@ -53,11 +53,11 @@ function BottomBar({ state, navigateToTab, hidden }: BottomTabBarProps & { hidde
                 accessibilityState={{ selected: focused }}
                 onPress={onPress}
                 hitSlop={6}
-                style={[styles.item, focused && { backgroundColor: t.primary }]}>
-                <Icon name={item.icon} size={24} color={focused ? t.onPrimary : t.navMuted} />
+                style={[styles.item, focused && { backgroundColor: t.navActiveBg }]}>
+                <Icon name={item.icon} size={24} color={focused ? t.navActiveText : t.navText} />
                 {route.name === 'caja' && cart.count > 0 ? (
-                  <View style={[styles.badge, { backgroundColor: t.primary, borderColor: t.nav }]}>
-                    <Text style={styles.badgeText}>{cart.count}</Text>
+                  <View style={[styles.badge, { backgroundColor: t.navActiveBg, borderColor: t.nav }]}>
+                    <Text style={[styles.badgeText, { color: t.navActiveText }]}>{cart.count}</Text>
                   </View>
                 ) : null}
               </Pressable>
@@ -104,11 +104,11 @@ function Sidebar({ state, navigateToTab, hidden }: BottomTabBarProps & { hidden:
                   styles.sideItem,
                   focused ? { backgroundColor: t.navActiveBg } : hovered && { backgroundColor: t.navHover },
                 ]}>
-                <Icon name={item.icon} size={22} color={focused ? t.navActiveText : t.navMuted} />
+                <Icon name={item.icon} size={22} color={focused ? t.navActiveText : t.navText} />
                 <Text style={[styles.sideText, { color: focused ? t.navActiveText : t.navText }]}>{item.label}</Text>
                 {route.name === 'caja' && cart.count > 0 ? (
-                  <View style={[styles.sideBadge, { backgroundColor: t.primary }]}>
-                    <Text style={{ color: t.onPrimary, fontSize: 12, fontWeight: '900' }}>{cart.count}</Text>
+                  <View style={[styles.sideBadge, { backgroundColor: focused ? t.navActiveText : t.navActiveBg }]}>
+                    <Text style={{ color: focused ? t.navActiveBg : t.navActiveText, fontSize: 12, fontWeight: '900' }}>{cart.count}</Text>
                   </View>
                 ) : null}
               </Pressable>
@@ -130,7 +130,7 @@ function Sidebar({ state, navigateToTab, hidden }: BottomTabBarProps & { hidden:
       </View>
       <View style={{ flex: 1 }} />
       <View style={[styles.sideFooter, { backgroundColor: t.navHover }]}>
-        <Text style={{ color: t.text, fontWeight: '800' }} numberOfLines={1}>{ctx.businessName}</Text>
+        <Text style={{ color: t.navText, fontWeight: '800' }} numberOfLines={1}>{ctx.businessName}</Text>
         <Text style={{ color: t.navMuted, fontSize: 12 }} numberOfLines={1}>{ctx.locationName}</Text>
       </View>
     </View>
