@@ -9,7 +9,6 @@ import { foodIcon } from '@/components/brand-icons';
 import { CHANNEL_OPTIONS, OrderPanel } from '@/components/order-panel';
 import { ProductImage } from '@/components/product-image';
 import { Button, Card, Chips, EmptyState, HeroCard, Icon, IconButton, Label, Screen, SectionTitle, useElevation } from '@/components/ui';
-import { Mamey } from '@/constants/theme';
 import { listCategories, listProducts } from '@/db/repo';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useCart } from '@/hooks/use-cart';
@@ -52,8 +51,8 @@ export default function MenuScreen() {
                 accessibilityState={{ selected }}
                 onPress={() => cart.setChannel(c.value)}
                 style={[styles.heroChip, selected && { backgroundColor: '#FFFFFF' }]}>
-                <Icon name={c.icon} size={16} color={selected ? Mamey : '#FFFFFF'} />
-                <Text style={{ color: selected ? Mamey : '#FFFFFF', fontWeight: '800', fontSize: 14 }}>{c.label}</Text>
+                <Icon name={c.icon} size={16} color={selected ? t.brand : '#FFFFFF'} />
+                <Text style={{ color: selected ? t.brand : '#FFFFFF', fontWeight: '800', fontSize: 14 }}>{c.label}</Text>
               </Pressable>
             );
           })}

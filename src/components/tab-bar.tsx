@@ -8,9 +8,9 @@ import { router } from 'expo-router';
 
 import { Logo } from '@/components/logo';
 import { Icon, type IconName } from '@/components/ui';
-import { Mamey } from '@/constants/theme';
 import { useBusiness } from '@/hooks/use-business';
 import { useCart } from '@/hooks/use-cart';
+import { useTheme } from '@/hooks/use-theme';
 
 const ICONS: Record<string, { icon: IconName; label: string }> = {
   index: { icon: 'home-variant', label: 'Inicio' },
@@ -24,7 +24,7 @@ const ICONS: Record<string, { icon: IconName; label: string }> = {
 /** Ancho desde el que se usa el menú lateral (PC o tablet grande). */
 export const SIDEBAR_MIN_WIDTH = 1000;
 
-/** Barra inferior flotante color mamey, solo íconos, como en las apps de comida. */
+/** Barra inferior flotante, solo íconos, como en las apps de comida (sigue el modo día/noche). */
 export function FloatingTabBar(props: BottomTabBarProps & { hidden: string[]; sidebar?: boolean }) {
   if (props.sidebar) return <Sidebar {...props} />;
   return <BottomBar {...props} />;
@@ -33,9 +33,10 @@ export function FloatingTabBar(props: BottomTabBarProps & { hidden: string[]; si
 function BottomBar({ state, navigateToTab, hidden }: BottomTabBarProps & { hidden: string[] }) {
   const insets = useSafeAreaInsets();
   const cart = useCart();
+  const t = useTheme();
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-      <View style={styles.bar}>
+      <View style={[styles.bar, { backgroundColor: t.nav, borderColor: t.navBorder, shadowColor: t.shadow }]}>
         {state.routes
           .filter((r) => ICONS[r.name] && !hidden.includes(r.name))
           .map((route) => {
@@ -52,10 +53,10 @@ function BottomBar({ state, navigateToTab, hidden }: BottomTabBarProps & { hidde
                 accessibilityState={{ selected: focused }}
                 onPress={onPress}
                 hitSlop={6}
-                style={[styles.item, focused && styles.itemActive]}>
-                <Icon name={item.icon} size={24} color={focused ? Mamey : '#FFFFFF'} />
+                style={[styles.item, focused && { backgroundColor: t.primary }]}>
+                <Icon name={item.icon} size={24} color={focused ? t.onPrimary : t.navMuted} />
                 {route.name === 'caja' && cart.count > 0 ? (
-                  <View style={styles.badge}>
+                  <View style={[styles.badge, { backgroundColor: t.primary, borderColor: t.nav }]}>
                     <Text style={styles.badgeText}>{cart.count}</Text>
                   </View>
                 ) : null}
@@ -72,6 +73,7 @@ function Sidebar({ state, navigateToTab, hidden }: BottomTabBarProps & { hidden:
   const cart = useCart();
   const ctx = useBusiness();
   const manager = !hidden.includes('panel');
+  const t = useTheme();
   const extra: { icon: IconName; label: string; href: '/catalogo' | '/gastos' | '/impresora' | '/orden' }[] = [
     ...(manager
       ? [
@@ -82,9 +84,9 @@ function Sidebar({ state, navigateToTab, hidden }: BottomTabBarProps & { hidden:
     { icon: 'printer-pos', label: 'Impresora', href: '/impresora' },
   ];
   return (
-    <View style={styles.side}>
+    <View style={[styles.side, { backgroundColor: t.nav, borderRightColor: t.navBorder }]}>
       <View style={{ paddingVertical: 18, alignItems: 'center' }}>
-        <Logo size={34} color="#FFFFFF" />
+        <Logo size={34} color={t.navLogo} />
       </View>
       <View style={{ gap: 4 }}>
         {state.routes
@@ -98,47 +100,50 @@ function Sidebar({ state, navigateToTab, hidden }: BottomTabBarProps & { hidden:
                 accessibilityRole="tab"
                 accessibilityState={{ selected: focused }}
                 onPress={() => !focused && navigateToTab(route.key)}
-                style={({ hovered }: { hovered?: boolean }) => [styles.sideItem, focused ? styles.itemActive : hovered && { backgroundColor: '#FFFFFF22' }]}>
-                <Icon name={item.icon} size={22} color={focused ? Mamey : '#FFFFFF'} />
-                <Text style={[styles.sideText, focused && { color: Mamey }]}>{item.label}</Text>
+                style={({ hovered }: { hovered?: boolean }) => [
+                  styles.sideItem,
+                  focused ? { backgroundColor: t.navActiveBg } : hovered && { backgroundColor: t.navHover },
+                ]}>
+                <Icon name={item.icon} size={22} color={focused ? t.navActiveText : t.navMuted} />
+                <Text style={[styles.sideText, { color: focused ? t.navActiveText : t.navText }]}>{item.label}</Text>
                 {route.name === 'caja' && cart.count > 0 ? (
-                  <View style={[styles.sideBadge, { backgroundColor: focused ? Mamey : '#FFFFFF' }]}>
-                    <Text style={{ color: focused ? '#FFFFFF' : Mamey, fontSize: 12, fontWeight: '900' }}>{cart.count}</Text>
+                  <View style={[styles.sideBadge, { backgroundColor: t.primary }]}>
+                    <Text style={{ color: t.onPrimary, fontSize: 12, fontWeight: '900' }}>{cart.count}</Text>
                   </View>
                 ) : null}
               </Pressable>
             );
           })}
       </View>
-      <View style={styles.sideDivider} />
+      <View style={[styles.sideDivider, { backgroundColor: t.navBorder }]} />
       <View style={{ gap: 4 }}>
         {extra.map((e) => (
           <Pressable
             key={e.href}
             accessibilityRole="link"
             onPress={() => router.push(e.href)}
-            style={({ hovered }: { hovered?: boolean }) => [styles.sideItem, hovered && { backgroundColor: '#FFFFFF22' }]}>
-            <Icon name={e.icon} size={20} color="#FFFFFFD9" />
-            <Text style={[styles.sideText, { fontWeight: '700', color: '#FFFFFFD9' }]}>{e.label}</Text>
+            style={({ hovered }: { hovered?: boolean }) => [styles.sideItem, hovered && { backgroundColor: t.navHover }]}>
+            <Icon name={e.icon} size={20} color={t.navMuted} />
+            <Text style={[styles.sideText, { fontWeight: '700', color: t.navText }]}>{e.label}</Text>
           </Pressable>
         ))}
       </View>
       <View style={{ flex: 1 }} />
-      <View style={styles.sideFooter}>
-        <Text style={{ color: '#FFFFFF', fontWeight: '800' }} numberOfLines={1}>{ctx.businessName}</Text>
-        <Text style={{ color: '#FFFFFFCC', fontSize: 12 }} numberOfLines={1}>{ctx.locationName}</Text>
+      <View style={[styles.sideFooter, { backgroundColor: t.navHover }]}>
+        <Text style={{ color: t.text, fontWeight: '800' }} numberOfLines={1}>{ctx.businessName}</Text>
+        <Text style={{ color: t.navMuted, fontSize: 12 }} numberOfLines={1}>{ctx.locationName}</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  side: { width: 232, backgroundColor: Mamey, paddingHorizontal: 14, paddingBottom: 16 },
+  side: { width: 232, paddingHorizontal: 14, paddingBottom: 16, borderRightWidth: StyleSheet.hairlineWidth },
   sideItem: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, paddingVertical: 11, paddingHorizontal: 12 },
-  sideText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15, flex: 1 },
+  sideText: { fontWeight: '800', fontSize: 15, flex: 1 },
   sideBadge: { minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  sideDivider: { height: 1, backgroundColor: '#FFFFFF33', marginVertical: 14, marginHorizontal: 6 },
-  sideFooter: { backgroundColor: '#FFFFFF22', borderRadius: 14, padding: 12, gap: 2 },
+  sideDivider: { height: 1, marginVertical: 14, marginHorizontal: 6 },
+  sideFooter: { borderRadius: 14, padding: 12, gap: 2 },
   wrap: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingHorizontal: 16 },
   bar: {
     width: '100%',
@@ -146,17 +151,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: Mamey,
     borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: 10,
     paddingHorizontal: 8,
     ...Platform.select({
       android: { elevation: 10 },
-      default: { shadowColor: '#7C2D12', shadowOpacity: 0.3, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } },
+      default: { shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } },
     }),
   },
   item: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  itemActive: { backgroundColor: '#FFFFFF' },
   badge: {
     position: 'absolute',
     top: 2,
@@ -165,11 +169,9 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     paddingHorizontal: 5,
-    backgroundColor: '#FFFFFF',
     borderWidth: 2,
-    borderColor: Mamey,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { color: Mamey, fontSize: 11, fontWeight: '900' },
+  badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
 });

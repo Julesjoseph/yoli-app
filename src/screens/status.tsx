@@ -5,12 +5,13 @@ import { Text } from '@/components/text';
 import { useAuth } from '@/auth/auth';
 import { Logo } from '@/components/logo';
 import { Button, Label, Screen } from '@/components/ui';
-import { Mamey } from '@/constants/theme';
 import { useBusinessState } from '@/hooks/use-business';
+import { useTheme } from '@/hooks/use-theme';
 
 export function LoadingScreen({ message }: { message?: string }) {
+  const t = useTheme();
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, backgroundColor: Mamey }}>
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, backgroundColor: t.brand }}>
       <Logo size={64} color="#FFFFFF" />
       <ActivityIndicator color="#FFFFFF" size="large" />
       {message ? <Text style={{ color: '#FFFFFFE6', fontWeight: '700', fontSize: 15 }}>{message}</Text> : null}

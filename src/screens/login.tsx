@@ -8,7 +8,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/auth';
 import { Logo } from '@/components/logo';
 import { Button, Card, Chips, Field, Icon, Label } from '@/components/ui';
-import { Mamey } from '@/constants/theme';
 import { pendingSyncCount } from '@/db/repo';
 import { DEMO_EMAIL, DEMO_PASSWORD } from '@/sync/config';
 import { supabase } from '@/sync/supabase';
@@ -58,7 +57,7 @@ export function LoginScreen() {
     <View style={{ flex: 1, backgroundColor: t.background }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View style={[styles.hero, { backgroundColor: Mamey }]}>
+          <View style={[styles.hero, { backgroundColor: t.brand }]}>
             <SafeAreaView edges={['top']} style={{ gap: 18 }}>
               <View style={{ gap: 10, alignItems: 'center' }}>
                 <Logo size={54} color="#FFFFFF" />

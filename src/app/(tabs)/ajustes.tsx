@@ -7,9 +7,9 @@ import { Text } from '@/components/text';
 
 import { useAuth } from '@/auth/auth';
 import { Button, Card, Chips, Field, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle, type IconName } from '@/components/ui';
-import { Mamey } from '@/constants/theme';
 import { getCommissionRates, pendingSyncCount, ROLE_LABELS, type Role } from '@/db/repo';
 import { canManage, useBusiness, useBusinessState, useFocusData } from '@/hooks/use-business';
+import { useThemePreference, type ThemePreference } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/sync/supabase';
 import { pushOutbox } from '@/sync/sync';
@@ -36,6 +36,7 @@ export default function SettingsScreen() {
   const auth = useAuth();
   const { changeLocation, reload } = useBusinessState();
   const t = useTheme();
+  const theme = useThemePreference();
   const manager = canManage(ctx);
   const [pending, reloadPending] = useFocusData(() => pendingSyncCount(db), [db]);
   const [syncMsg, setSyncMsg] = useState('');
@@ -71,7 +72,7 @@ export default function SettingsScreen() {
   return (
     <Screen title="Perfil">
       <View style={{ alignItems: 'center', gap: 6, paddingVertical: 4 }}>
-        <View style={[styles.avatar, { backgroundColor: Mamey }]}>
+        <View style={[styles.avatar, { backgroundColor: t.brand }]}>
           <Text style={styles.avatarText}>{initials(userName || ctx.businessName)}</Text>
         </View>
         <Label bold size={20} numberOfLines={1}>{userName || ctx.businessName}</Label>
@@ -99,6 +100,25 @@ export default function SettingsScreen() {
             <Icon name="chevron-right" color={t.textSecondary} />
           </Pressable>
         ))}
+      </Card>
+
+      <Card>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <IconBadge name="theme-light-dark" color={t.primary} />
+          <View style={{ flex: 1 }}>
+            <Label bold size={16}>Apariencia</Label>
+            <Label muted size={13}>Modo día, noche o como esté el equipo</Label>
+          </View>
+        </View>
+        <Chips
+          options={[
+            { value: 'auto', label: 'Automático', icon: 'brightness-auto' },
+            { value: 'light', label: 'Día', icon: 'white-balance-sunny' },
+            { value: 'dark', label: 'Noche', icon: 'weather-night' },
+          ]}
+          value={theme.preference}
+          onChange={(v) => theme.setPreference(v as ThemePreference)}
+        />
       </Card>
 
       <Card>

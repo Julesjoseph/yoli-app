@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/text';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemePreferenceProvider, useColorScheme } from '@/hooks/use-color-scheme';
 
 import { AuthProvider } from '@/auth/auth';
 import { migrate } from '@/db/database';
@@ -71,12 +71,20 @@ const dbErr = StyleSheet.create({
 });
 
 export default function RootLayout() {
+  return (
+    <ThemePreferenceProvider>
+      <ThemedRoot />
+    </ThemePreferenceProvider>
+  );
+}
+
+function ThemedRoot() {
   const colorScheme = useColorScheme();
   const [dbError, setDbError] = useState<Error | null>(null);
   if (dbError) return <DatabaseError error={dbError} />;
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <StatusBar style="dark" />
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <SQLiteProvider databaseName="yoli.db" onInit={migrate} onError={setDbError}>
         <AuthProvider>
           <BusinessProvider>

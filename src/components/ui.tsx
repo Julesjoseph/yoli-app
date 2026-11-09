@@ -8,7 +8,6 @@ import { Text } from '@/components/text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Logo } from '@/components/logo';
-import { BrandGradient } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -119,9 +118,10 @@ export function Card({ children, style, padded = true }: { children: ReactNode; 
 /** Tarjeta con degradado de marca (resúmenes destacados). */
 export function HeroCard({ children, style }: { children: ReactNode; style?: ViewStyle }) {
   const elevation = useElevation(2);
+  const t = useTheme();
   return (
     <LinearGradient
-      colors={BrandGradient}
+      colors={t.brandGradient}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[styles.hero, elevation, style]}>
@@ -235,7 +235,7 @@ export function Button({
         style,
       ]}>
       {variant === 'primary' ? (
-        <LinearGradient colors={BrandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.buttonGradient}>
+        <LinearGradient colors={t.brandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.buttonGradient}>
           {content}
         </LinearGradient>
       ) : (

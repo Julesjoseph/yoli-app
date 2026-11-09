@@ -9,7 +9,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { foodIcon } from '@/components/brand-icons';
 import { ProductImage } from '@/components/product-image';
 import { EmptyState, Icon, IconBadge, Label, useElevation } from '@/components/ui';
-import { Mamey } from '@/constants/theme';
 import { getRecipe, listCatalogIngredients } from '@/db/catalog';
 import { listCategories, listProducts } from '@/db/repo';
 import { useFocusData } from '@/hooks/use-business';
@@ -50,7 +49,7 @@ export default function ProductDetailScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: t.background }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-        <View style={[styles.hero, { backgroundColor: Mamey }]}>
+        <View style={[styles.hero, { backgroundColor: t.brand }]}>
           <SafeAreaView edges={['top']} style={styles.topBar}>
             <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={goBack} hitSlop={8} style={styles.round}>
               <Icon name="arrow-left" color="#FFFFFF" />
@@ -65,7 +64,7 @@ export default function ProductDetailScreen() {
               <Icon name="shopping-outline" color="#FFFFFF" />
               {cart.count ? (
                 <View style={styles.badge}>
-                  <Text style={{ color: Mamey, fontSize: 11, fontWeight: '900' }}>{cart.count}</Text>
+                  <Text style={{ color: t.brand, fontSize: 11, fontWeight: '900' }}>{cart.count}</Text>
                 </View>
               ) : null}
             </Pressable>
