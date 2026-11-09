@@ -112,7 +112,8 @@ async function printHtml(html: string, width: TicketSettings['width'], heightMm:
   }
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
-  Object.assign(frame.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
+  // Ancho real del papel (fuera de la pantalla) para que las medidas en vw coincidan con la impresión.
+  Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: `${width}mm`, height: '10px', border: '0' });
   document.body.appendChild(frame);
   await new Promise<void>((resolve) => {
     frame.onload = () => resolve();
@@ -121,7 +122,7 @@ async function printHtml(html: string, width: TicketSettings['width'], heightMm:
   const win = frame.contentWindow!;
   // Página del ancho del papel y del largo exacto del ticket (sin hojas en blanco).
   const doc = frame.contentDocument!;
-  const pageMm = Math.ceil((doc.documentElement.scrollHeight * 25.4) / 96) + 8;
+  const pageMm = Math.ceil((doc.documentElement.scrollHeight * 25.4) / 96) + 2;
   const style = doc.createElement('style');
   style.textContent = `@page { size: ${width}mm ${pageMm}mm; margin: 0; }`;
   doc.head.appendChild(style);

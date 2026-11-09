@@ -47,7 +47,7 @@ export function buildReceiptHtml(
   const date = new Date(order.created_at);
   const when = `${date.toLocaleDateString('es-DO')} ${date.toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit' })}`;
   const width = s.width === '58' ? 58 : 80;
-  const font = s.width === '58' ? 11 : 13;
+  const f = FONT_VW[s.width];
   const lines = order.items
     .map(
       (i) => `<tr><td colspan="2" class="name">${esc(i.name)}</td></tr>
@@ -61,14 +61,15 @@ export function buildReceiptHtml(
 
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 @page { size: ${width}mm 200mm; margin: 0; }
+/* Todo se mide en vw (ancho de la página), así llena el papel en el teléfono, la PC y la impresora. */
 * { box-sizing: border-box; }
 html, body { height: auto; overflow: hidden; }
-body { margin: 0; padding: 3mm; width: ${width}mm; font-family: 'Courier New', monospace; font-size: ${font}px; color: #000; }
+body { margin: 0; padding: ${PAD_VW}vw; width: 100%; font-family: 'Courier New', monospace; font-size: ${f}vw; line-height: ${LINE}; color: #000; }
 .c { text-align: center; } .r { text-align: right; white-space: nowrap; } .b { font-weight: bold; }
-.big { font-size: ${font + 5}px; font-weight: bold; } .muted { color: #000; }
-hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
-table { width: 100%; border-collapse: collapse; } td { padding: 1px 0; vertical-align: top; }
-.name { padding-top: 4px; }
+.big { font-size: ${f * BIG}vw; font-weight: bold; } .muted { color: #000; }
+hr { border: 0; border-top: 1px dashed #000; margin: ${HR_VW}vw 0; }
+table { width: 100%; border-collapse: collapse; } td { padding: 0; vertical-align: top; }
+.name { padding-top: ${NAME_VW}vw; }
 </style></head><body>
 <div class="c big">${esc(shop.businessName)}</div>
 <div class="c">${esc(shop.locationName)}</div>
@@ -98,22 +99,36 @@ ${order.cash_received ? `<tr><td>Recibido</td><td class="r">${money(order.cash_r
 <hr>
 ${s.footer ? `<div class="c">${esc(s.footer)}</div>` : ''}
 <div class="c" style="margin-top:4px">Este documento no es un comprobante fiscal</div>
-<div style="height:6mm"></div>
+<div style="height:${END_VW}vw"></div>
 </body></html>`;
 }
 
 
-/** Largo aproximado del ticket en mm, para generar la página del tamaño justo. */
+/** Tamaños del ticket en vw (1vw = 1% del ancho del papel). */
+const FONT_VW = { '80': 4.1, '58': 5 } as const;
+const LINE = 1.35;
+const BIG = 1.3;
+const PAD_VW = 3;
+const HR_VW = 1.2;
+const NAME_VW = 0.8;
+const END_VW = 5;
+
+/** Largo del ticket en mm (con los mismos tamaños del CSS), para que la página sea justa. */
 export function estimateTicketHeightMm(order: TicketOrder, s: TicketSettings) {
-  const font = s.width === '58' ? 11 : 13;
-  const lineMm = (font * 1.45 * 25.4) / 96;
-  const nameChars = s.width === '58' ? 24 : 34;
-  const itemLines = order.items.reduce((n, i) => n + 1 + Math.ceil(i.name.length / nameChars), 0);
+  const width = s.width === '58' ? 58 : 80;
+  const vw = width / 100; // mm por vw
+  const f = FONT_VW[s.width];
+  const line = f * LINE * vw;
+  const charsPerLine = Math.floor((100 - 2 * PAD_VW) / (f * 0.6));
+  const itemLines = order.items.reduce((n, i) => n + Math.ceil(i.name.length / charsPerLine) + 1, 0);
   const lines =
-    3 + [s.rnc, s.address, s.phone].filter(Boolean).length + // encabezado
-    5 + (order.external_ref ? 1 : 0) + // datos de la orden
+    1 + [s.rnc, s.address, s.phone].filter(Boolean).length + // local y datos del negocio
+    4 + (order.external_ref ? 1 : 0) + // título, orden, fecha, tipo
+    1 + // atendió (si aplica; se deja espacio)
     itemLines +
-    5 + (order.discount ? 1 : 0) + (order.tip_law ? 1 : 0) + (order.cash_received ? 2 : 0) + // totales
-    4; // pie
-  return Math.ceil(lines * lineMm + 4 * 4 + 6 + 8);
+    3 + (order.discount ? 1 : 0) + (order.tip_law ? 1 : 0) + (order.cash_received ? 2 : 0) + // totales y pago
+    (s.footer ? 1 : 0) + 2; // pie
+  const bigLines = 2 * line * BIG; // nombre del negocio y TOTAL
+  const extras = 5 * (2 * HR_VW * vw + 0.3) + order.items.length * NAME_VW * vw + (2 * PAD_VW + END_VW) * vw;
+  return Math.ceil(lines * line + bigLines + extras + 2);
 }
