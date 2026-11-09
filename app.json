@@ -47,6 +47,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "16d97026-ca79-4393-a846-8dff35df5848"
+      }
+    },
+    "owner": "andronik01"
   }
 }
