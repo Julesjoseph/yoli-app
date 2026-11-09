@@ -1,31 +1,29 @@
 import { NativeTabs } from 'expo-router/native-tabs';
-import { useColorScheme } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
-
+  const colors = useTheme();
   return (
     <NativeTabs
       backgroundColor={colors.background}
       indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
+      labelStyle={{ selected: { color: colors.primary } }}>
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
-          renderingMode="template"
-        />
+        <NativeTabs.Trigger.Label>Caja</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="cart.fill" md="point_of_sale" />
       </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="explore">
-        <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
-        />
+      <NativeTabs.Trigger name="inventario">
+        <NativeTabs.Trigger.Label>Inventario</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="shippingbox.fill" md="inventory_2" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="gastos">
+        <NativeTabs.Trigger.Label>Gastos</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="creditcard.fill" md="payments" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="reportes">
+        <NativeTabs.Trigger.Label>Reportes</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="chart.bar.fill" md="bar_chart" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );

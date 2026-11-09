@@ -1,56 +1,55 @@
-# Welcome to your Expo app 👋
+# YOLI APP
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+App móvil (Android, iPhone y tablet) para manejar un negocio de comida rápida, comedor y cafetería en República Dominicana.
 
-## Get started
+## Qué hace esta primera versión
 
-1. Install dependencies
+- **Caja (POS):** menú por categorías, órdenes de comedor, para llevar, PedidosYa y Uber Eats. Calcula ITBIS 18% (incluido en el precio) y el 10% de ley de propina en comedor. En tablet muestra el menú y la orden lado a lado.
+- **PedidosYa y Uber Eats:** cada pedido guarda su número y descuenta la comisión de la plataforma (25% y 30% de ejemplo, configurables) para ver el ingreso real.
+- **Inventario:** insumos con stock mínimo y recetas. Cada venta descuenta los ingredientes automáticamente. Entradas por compra, mermas y ajustes.
+- **Gastos:** por categoría, con NCF del proveedor (útil para el reporte 606).
+- **Reportes:** ventas, comisiones, ITBIS, gastos y ganancia de hoy, la semana o el mes, por canal y los productos más vendidos.
+- **Sin internet:** todo se guarda en el dispositivo (SQLite) y queda en una cola para subir a Supabase cuando hay conexión.
+- **Factura electrónica (e-CF DGII):** módulo listo en `src/invoicing/provider.ts` para conectar un proveedor certificado. Hoy usa un modo de prueba que no emite comprobantes válidos.
 
-   ```bash
-   npm install
-   ```
+## Tecnología
 
-2. Start the app
+- Expo SDK 58 + React Native + Expo Router
+- SQLite local (`expo-sqlite`) para trabajar sin internet
+- Supabase (Postgres + usuarios + seguridad por negocio) para respaldo en la nube y varios locales
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Cómo probarla
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+Escanea el código QR con la app **Expo Go** en tu teléfono o tablet. La primera vez se cargan productos e insumos de ejemplo.
 
-### Other setup steps
+## Conectar la nube (Supabase)
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+1. Crea un proyecto gratis en https://supabase.com
+2. En *SQL Editor*, ejecuta `supabase/migrations/0001_esquema_inicial.sql`.
+3. Copia `.env.example` como `.env` y pon la URL y la anon key del proyecto.
 
-## Learn more
+## Estructura
 
-To learn more about developing your project with Expo, look at the following resources:
+```
+src/app/            Pantallas: index (Caja), inventario, gastos, reportes
+src/lib/calc.ts     Cálculos de ITBIS, propina, comisiones, recetas y ganancia (con pruebas)
+src/db/             Base de datos local y consultas
+src/sync/           Subida de la cola local a Supabase
+src/invoicing/      Adaptador para el proveedor de factura electrónica
+supabase/           Esquema de la base de datos en la nube
+tests/              Pruebas (npm test)
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Próximos pasos
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Inicio de sesión y roles (dueño, gerente, cajero, cocina) con Supabase Auth
+- Selector de local y descarga del menú/insumos desde la nube
+- Editar menú, recetas y precios distintos por plataforma
+- Cierre de caja diario
+- Importar reportes de PedidosYa y Uber Eats (CSV)
+- Conectar el proveedor de e-CF elegido
