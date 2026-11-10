@@ -23,10 +23,10 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: str
             <View pointerEvents="none" style={[styles.circle, styles.circleBig]} />
             <View pointerEvents="none" style={[styles.circle, styles.circleSmall]} />
             <SafeAreaView edges={['top']} style={styles.heroInner}>
-              <View style={{ alignSelf: 'flex-start' }}>
+              <View style={{ alignSelf: 'center' }}>
                 <Logo size={40} color="#FFFFFF" />
               </View>
-              <View style={{ gap: 8, marginTop: 26 }}>
+              <View style={{ gap: 8, marginTop: 26, alignItems: 'center' }}>
                 <Text style={styles.title}>{title}</Text>
                 <Text style={styles.subtitle}>{subtitle}</Text>
               </View>
@@ -276,8 +276,8 @@ const styles = StyleSheet.create({
   circle: { position: 'absolute', borderRadius: 999, backgroundColor: '#FFFFFF' },
   circleBig: { width: 260, height: 260, top: -90, right: -80, opacity: 0.1 },
   circleSmall: { width: 130, height: 130, top: 110, right: 40, opacity: 0.07 },
-  title: { color: '#FFFFFF', fontSize: 38, fontWeight: '900', letterSpacing: -0.5 },
-  subtitle: { color: '#FFFFFFD9', fontSize: 16, lineHeight: 22, maxWidth: 380 },
+  title: { color: '#FFFFFF', fontSize: 38, fontWeight: '900', letterSpacing: -0.5, textAlign: 'center' },
+  subtitle: { color: '#FFFFFFD9', fontSize: 16, lineHeight: 22, maxWidth: 380, textAlign: 'center' },
   sheet: { flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32, marginTop: -26 },
   sheetInner: { width: '100%', maxWidth: 480, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 30, paddingBottom: 40, gap: 16 },
   or: { flexDirection: 'row', alignItems: 'center', gap: 12 },

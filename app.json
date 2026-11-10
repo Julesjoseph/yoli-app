@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "YOLI APP",
+    "name": "YOLI SOFT",
     "slug": "yoli-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -39,8 +39,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "YOLI APP usa tus fotos para las imágenes de los productos.",
-          "cameraPermission": "YOLI APP usa la cámara para tomar fotos de los productos."
+          "photosPermission": "YOLI SOFT usa tus fotos para las imágenes de los productos.",
+          "cameraPermission": "YOLI SOFT usa la cámara para tomar fotos de los productos."
         }
       ]
     ],
