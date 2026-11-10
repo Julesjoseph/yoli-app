@@ -5,6 +5,7 @@ import { getSetting, setSettings } from '@/db/database';
 import { CHANNEL_LABELS, type Channel } from '@/lib/calc';
 
 import {
+  buildInvoiceLetterHtml,
   buildReceiptHtml,
   estimateTicketHeightMm,
   type TicketInvoice,
@@ -85,6 +86,36 @@ export async function printOrderTicket(
   const order = { ...found, invoice };
   const html = buildReceiptHtml(order, { ...shop, channelLabel: CHANNEL_LABELS[order.channel] }, settings);
   await printHtml(html, settings.width, estimateTicketHeightMm(order, settings));
+}
+
+/** Factura en hoja carta (PDF): para guardar, enviar o imprimir en impresora normal. */
+export async function printInvoiceLetter(
+  db: SQLiteDatabase,
+  orderId: string,
+  shop: { businessName: string; locationName: string; logoUrl?: string | null; email?: string },
+  invoice: TicketInvoice,
+) {
+  const [found, settings] = await Promise.all([getTicketOrder(db, orderId), getTicketSettings(db)]);
+  if (!found) throw new Error('No se encontró la orden.');
+  const html = buildInvoiceLetterHtml({ ...found, invoice }, { ...shop, channelLabel: CHANNEL_LABELS[found.channel] }, settings);
+  if (Platform.OS !== 'web') {
+    const Print = await import('expo-print');
+    const page = { width: 612, height: 792 }; // carta en puntos
+    const { uri } = await Print.printToFileAsync({ html, ...page });
+    await Print.printAsync({ uri, ...page });
+    return;
+  }
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: '216mm', height: '279mm', border: '0' });
+  document.body.appendChild(frame);
+  await new Promise<void>((resolve) => {
+    frame.onload = () => resolve();
+    frame.srcdoc = html;
+  });
+  frame.contentWindow!.focus();
+  frame.contentWindow!.print();
+  setTimeout(() => frame.remove(), 60_000);
 }
 
 /** Ticket de prueba para revisar el tamaño y los datos del negocio. */

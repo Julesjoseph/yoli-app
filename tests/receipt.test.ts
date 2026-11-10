@@ -53,3 +53,20 @@ test('ticket con factura electrónica', async () => {
   }
   assert.ok(!html.includes('no es un comprobante fiscal'));
 });
+
+test('factura carta: datos de la DGII y QR', async () => {
+  const { buildInvoiceLetterHtml, ecfQrUrl } = await import('../src/printing/receipt-html.ts');
+  const invoice = { ecf_type: '32', encf: 'E320000000001', customer_rnc: null, customer_name: null, security_code: '41D0A4', environment: 'prueba', created_at: '2026-11-10T16:48:00.000Z' };
+  const html = buildInvoiceLetterHtml({ ...order, invoice }, { businessName: 'Yoli', locationName: 'Centro' }, { ...settings, legalName: 'Yoli SRL' });
+  assert.match(html, /size: letter/);
+  assert.match(html, /FACTURA DE CONSUMO ELECTRÓNICA/);
+  assert.match(html, /E320000000001/);
+  assert.match(html, /Consumidor final/);
+  assert.match(html, /<svg/);
+  assert.match(html, /MODO PRUEBA/);
+  const url = ecfQrUrl(invoice, '131-234567', 320);
+  assert.match(url, /^https:\/\/fc\.dgii\.gov\.do\/testecf\/ConsultaTimbreFC\?RncEmisor=131234567&ENCF=E320000000001&MontoTotal=320\.00&CodigoSeguridad=41D0A4$/);
+  const e31 = ecfQrUrl({ ...invoice, ecf_type: '31', customer_rnc: '101000001', environment: 'produccion' }, '131234567', 320);
+  assert.match(e31, /^https:\/\/ecf\.dgii\.gov\.do\/ecf\/ConsultaTimbre\?RncEmisor=131234567&RncComprador=101000001&ENCF=/);
+  assert.equal(ecfQrUrl({ ...invoice, qr_url: 'https://x.test/qr' }, '1', 1), 'https://x.test/qr');
+});
