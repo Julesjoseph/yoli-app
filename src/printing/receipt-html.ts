@@ -42,6 +42,8 @@ export interface TicketInvoice {
   qr_url?: string | null;
   /** Cuándo se emitió (fecha de firma). */
   created_at?: string | null;
+  /** 'manual' = emitida en otro sistema; la fecha de firma no se conoce. */
+  provider?: string | null;
 }
 
 const two = (n: number) => String(n).padStart(2, '0');
@@ -51,7 +53,7 @@ const dmy = (d: Date) => `${two(d.getDate())}-${two(d.getMonth() + 1)}-${d.getFu
  * Enlace del código QR de la representación impresa del e-CF (consulta del timbre
  * en la DGII). Si el proveedor ya dio uno, se usa ese.
  */
-export function ecfQrUrl(inv: TicketInvoice, issuerRnc: string, total: number) {
+export function ecfQrUrl(inv: TicketInvoice, issuerRnc: string, total: number): string | null {
   if (inv.qr_url) return inv.qr_url;
   const test = inv.environment !== 'produccion';
   const signed = new Date(inv.created_at ?? Date.now());
@@ -62,6 +64,8 @@ export function ecfQrUrl(inv: TicketInvoice, issuerRnc: string, total: number) {
   if (inv.ecf_type === '32' && total < 250_000) {
     return `https://fc.dgii.gov.do/${test ? 'testecf' : 'ecf'}/ConsultaTimbreFC?${q({ RncEmisor: rnc, ENCF: inv.encf ?? '', MontoTotal: amount, CodigoSeguridad: inv.security_code ?? '' })}`;
   }
+  // Registrada a mano: no se sabe la fecha de firma exacta, el QR saldría mal.
+  if (inv.provider === 'manual') return null;
   return `https://ecf.dgii.gov.do/${test ? 'testecf' : 'ecf'}/ConsultaTimbre?${q({
     RncEmisor: rnc,
     ...(inv.customer_rnc ? { RncComprador: inv.customer_rnc } : {}),
@@ -80,6 +84,9 @@ export function qrSvg(text: string) {
   qr.make();
   return qr.createSvgTag({ cellSize: 2, margin: 0, scalable: true });
 }
+
+const qrBlock = (url: string | null) =>
+  url ? `<div class="qr">${qrSvg(url)}</div>` : '<div class="c">Consulta este comprobante en dgii.gov.do</div>';
 
 const signedAt = (inv: TicketInvoice) => {
   const d = new Date(inv.created_at ?? Date.now());
@@ -168,9 +175,9 @@ ${order.cash_received ? `<tr><td>Recibido</td><td class="r">${money(order.cash_r
 <tr><td class="b">Devuelta</td><td class="r b">${money(order.change_given ?? 0)}</td></tr>` : ''}
 </table>
 <hr>
-${order.invoice ? `<div class="qr">${qrSvg(ecfQrUrl(order.invoice, s.rnc, order.total))}</div>
+${order.invoice ? `${qrBlock(ecfQrUrl(order.invoice, s.rnc, order.total))}
 ${order.invoice.security_code ? `<div class="c">Código de seguridad: <b>${esc(order.invoice.security_code)}</b></div>` : ''}
-<div class="c">Fecha de firma: ${esc(signedAt(order.invoice))}</div>` : ''}
+${order.invoice.provider === 'manual' ? '' : `<div class="c">Fecha de firma: ${esc(signedAt(order.invoice))}</div>`}` : ''}
 ${order.invoice?.environment === 'prueba' ? `<div class="c b">MODO PRUEBA · NO VÁLIDO ANTE LA DGII</div>` : ''}
 ${s.footer ? `<div class="c">${esc(s.footer)}</div>` : ''}
 ${order.invoice ? '' : '<div class="c" style="margin-top:4px">Este documento no es un comprobante fiscal</div>'}
@@ -298,10 +305,10 @@ table { width: 100%; border-collapse: collapse; }
 
 <div class="bottom">
   <div class="stamp">
-    <div class="qr">${qrSvg(ecfQrUrl(inv, s.rnc, order.total))}</div>
+    ${qrBlock(ecfQrUrl(inv, s.rnc, order.total))}
     <div>
       ${inv.security_code ? `<div>Código de seguridad:</div><div class="b" style="font-size:12pt;margin-bottom:6px">${esc(inv.security_code)}</div>` : ''}
-      <div>Fecha de firma digital:</div><div class="b">${esc(signedAt(inv))}</div>
+      ${inv.provider === 'manual' ? '' : `<div>Fecha de firma digital:</div><div class="b">${esc(signedAt(inv))}</div>`}
       <div style="margin-top:6px">Forma de pago: ${esc(PAYMENT_LABELS[order.payment_method] ?? order.payment_method)}</div>
     </div>
   </div>

@@ -8,7 +8,17 @@ import { CHANNEL_ICONS } from '@/components/brand-icons';
 import { ChannelColors } from '@/constants/theme';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { ECF_LABELS, emitInvoice, getEinvoiceSettings, listInvoices, refreshInvoice, type EcfType, type Invoice } from '@/invoicing/ecf';
+import {
+  deleteManualInvoice,
+  ECF_LABELS,
+  emitInvoice,
+  getEinvoiceSettings,
+  listInvoices,
+  recordManualInvoice,
+  refreshInvoice,
+  type EcfType,
+  type Invoice,
+} from '@/invoicing/ecf';
 import { CHANNEL_LABELS, formatRD } from '@/lib/calc';
 import { getLocalProfile } from '@/db/business-profile';
 import { getTicketOrder, printInvoiceLetter, printOrderTicket, shareTicketPdf, ticketNumber } from '@/printing/receipt';
@@ -23,6 +33,8 @@ export default function SaleScreen() {
   const [type, setType] = useState<EcfType | null>(null);
   const [rnc, setRnc] = useState('');
   const [client, setClient] = useState('');
+  const [encf, setEncf] = useState('');
+  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok?: boolean } | null>(null);
 
@@ -38,6 +50,7 @@ export default function SaleScreen() {
   const settings = data?.settings?.settings;
   const lastRejected = !valid.length ? (data?.invoices ?? []).filter((i) => i.status === 'rechazada').pop() : undefined;
   const chosen: EcfType = type ?? settings?.default_type ?? '32';
+  const manual = settings?.provider === 'manual';
   const shop = { businessName: ctx.businessName, locationName: ctx.locationName };
 
   async function print(invoice?: Invoice) {
@@ -70,10 +83,13 @@ export default function SaleScreen() {
     setMsg(null);
     // La venta tiene que estar en la nube antes de facturarla.
     await pushOutbox(db).catch(() => undefined);
-    const r = await emitInvoice(id, chosen, chosen === '31' ? { rnc, name: client } : undefined);
+    const customer = chosen === '31' ? { rnc, name: client } : undefined;
+    const r = manual ? await recordManualInvoice(id, chosen, encf, code, customer) : await emitInvoice(id, chosen, customer);
     setBusy(false);
     if (r.error) return setMsg({ text: r.error });
-    setMsg({ text: `Factura emitida: ${r.invoice?.encf ?? ''}`, ok: true });
+    setEncf('');
+    setCode('');
+    setMsg({ text: `Factura ${manual ? 'guardada' : 'emitida'}: ${r.invoice?.encf ?? ''}`, ok: true });
     reload();
   }
 
@@ -145,6 +161,21 @@ export default function SaleScreen() {
             <Button icon="printer" title="Imprimir en ticket" onPress={() => print(inv)} />
             <Button variant="secondary" icon="share-variant" title="Enviar o guardar PDF (tamaño ticket)" onPress={() => sharePdf(inv)} />
             <Button variant="secondary" icon="file-pdf-box" title="Factura en hoja carta (PDF)" onPress={() => printLetter(inv)} />
+            {inv.provider === 'manual' && canManage(ctx) ? (
+              <Button
+                variant="ghost"
+                icon="delete-outline"
+                title="Quitar (si se escribió mal)"
+                disabled={busy}
+                onPress={async () => {
+                  setBusy(true);
+                  const error = await deleteManualInvoice(inv.id);
+                  setBusy(false);
+                  setMsg(error ? { text: error } : { text: 'Factura quitada. Ya puedes escribirla de nuevo.', ok: true });
+                  reload();
+                }}
+              />
+            ) : null}
           </Card>
         ))
       ) : data?.settings?.error ? (
@@ -175,15 +206,38 @@ export default function SaleScreen() {
               <Field label="Nombre o razón social del cliente" icon="domain" value={client} onChangeText={setClient} placeholder="Ej. Empresa ABC SRL" />
             </>
           ) : null}
-          {settings?.environment === 'prueba' ? (
+          {manual ? (
+            <>
+              <Label muted size={13}>
+                Emítela primero en {settings?.provider_name || 'tu proveedor'} y copia aquí lo que te dio.
+              </Label>
+              <Field
+                label={`e-NCF (E${chosen} y 10 números)`}
+                icon="pound"
+                autoCapitalize="characters"
+                value={encf}
+                onChangeText={setEncf}
+                placeholder={`Ej. E${chosen}0000000001`}
+              />
+              <Field
+                label="Código de seguridad (6 letras o números)"
+                icon="shield-key-outline"
+                autoCapitalize="characters"
+                value={code}
+                onChangeText={setCode}
+                placeholder="Ej. 4X7K2P"
+              />
+            </>
+          ) : null}
+          {!manual && settings?.environment === 'prueba' ? (
             <Label muted size={13}>Modo prueba: el comprobante no se envía a la DGII.</Label>
           ) : null}
           <Button
             size="lg"
             icon="file-send-outline"
-            title={busy ? 'Emitiendo…' : 'Emitir factura electrónica'}
+            title={busy ? (manual ? 'Guardando…' : 'Emitiendo…') : manual ? 'Guardar factura' : 'Emitir factura electrónica'}
             onPress={emit}
-            disabled={busy || (chosen === '31' && (!rnc.trim() || !client.trim()))}
+            disabled={busy || (chosen === '31' && (!rnc.trim() || !client.trim())) || (manual && (!encf.trim() || !code.trim()))}
           />
         </Card>
       )}

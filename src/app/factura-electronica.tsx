@@ -45,6 +45,9 @@ export default function EinvoiceSettingsScreen() {
     for (const d of [s.seq32_due, s.seq31_due]) {
       if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return setMsg({ text: 'La fecha de vencimiento va así: 2027-12-31.' });
     }
+    if (s.enabled && s.provider === 'manual' && !s.provider_name?.trim()) {
+      return setMsg({ text: 'Escribe el nombre de tu proveedor.' });
+    }
     if (s.enabled && s.provider === 'alanube' && !s.seq32_next && !s.seq31_next) {
       return setMsg({ text: 'Pon al menos una secuencia e-NCF (la da la DGII).' });
     }
@@ -106,14 +109,34 @@ export default function EinvoiceSettingsScreen() {
               options={PROVIDERS.map((p) => ({ value: p.value, label: p.ready ? p.label : `${p.label} (pronto)` }))}
               value={s.provider}
               onChange={(v) => {
-                if (owner && PROVIDERS.find((p) => p.value === v)?.ready) set({ provider: v, environment: v === 'prueba' ? 'prueba' : s.environment });
+                if (owner && PROVIDERS.find((p) => p.value === v)?.ready) {
+                  set({ provider: v, environment: v === 'prueba' ? 'prueba' : v === 'manual' ? 'produccion' : s.environment });
+                }
               }}
             />
             {s.provider === 'prueba' ? (
               <Label muted size={13}>Modo prueba: arma la factura para practicar, pero no la envía a la DGII.</Label>
             ) : null}
 
-            {provider && s.provider !== 'prueba' ? (
+            {s.provider === 'manual' ? (
+              <>
+                <Label muted size={13}>
+                  Para usar cualquier proveedor certificado por la DGII. Emites la factura en el sistema de tu proveedor y
+                  luego, en la venta, escribes el e-NCF y el código de seguridad. YOLI SOFT la guarda y la imprime en el
+                  ticket con el código QR.
+                </Label>
+                <Field
+                  label="Nombre de tu proveedor"
+                  icon="domain"
+                  value={s.provider_name ?? ''}
+                  onChangeText={(v) => set({ provider_name: v || null })}
+                  editable={owner}
+                  placeholder="Ej. el sistema donde emites tus e-CF"
+                />
+              </>
+            ) : null}
+
+            {provider && s.provider === 'alanube' ? (
               <>
                 <Label muted size={13}>Ambiente</Label>
                 <Chips

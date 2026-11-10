@@ -70,3 +70,12 @@ test('factura carta: datos de la DGII y QR', async () => {
   assert.match(e31, /^https:\/\/ecf\.dgii\.gov\.do\/ecf\/ConsultaTimbre\?RncEmisor=131234567&RncComprador=101000001&ENCF=/);
   assert.equal(ecfQrUrl({ ...invoice, qr_url: 'https://x.test/qr' }, '1', 1), 'https://x.test/qr');
 });
+
+test('factura manual: sin fecha de firma y QR solo si se puede armar', async () => {
+  const { buildReceiptHtml, ecfQrUrl } = await import('../src/printing/receipt-html.ts');
+  const inv = { ecf_type: '32', encf: 'E320000000500', customer_rnc: null, customer_name: null, security_code: 'ABC123', environment: 'produccion', provider: 'manual' };
+  const html = buildReceiptHtml({ ...order, invoice: inv }, { businessName: 'Yoli', locationName: 'Centro' }, settings);
+  assert.doesNotMatch(html, /Fecha de firma/);
+  assert.match(html, /<svg/);
+  assert.equal(ecfQrUrl({ ...inv, ecf_type: '31', customer_rnc: '101000001' }, '131234567', 320), null);
+});

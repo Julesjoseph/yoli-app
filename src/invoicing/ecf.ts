@@ -18,6 +18,7 @@ export const ECF_LABELS: Record<string, string> = {
 export const PROVIDERS = [
   { value: 'prueba', label: 'Modo prueba', ready: true },
   { value: 'alanube', label: 'Alanube', ready: true },
+  { value: 'manual', label: 'Otro proveedor (manual)', ready: true },
 ] as const;
 
 export interface EinvoiceSettings {
@@ -32,6 +33,8 @@ export interface EinvoiceSettings {
   seq31_due: string | null;
   /** Id de la compañía en Alanube (solo si es una compañía asociada). */
   provider_company_id: string | null;
+  /** Nombre del proveedor cuando la factura se registra a mano. */
+  provider_name: string | null;
 }
 
 export interface Invoice {
@@ -60,6 +63,7 @@ const DEFAULTS: EinvoiceSettings = {
   seq31_next: null,
   seq31_due: null,
   provider_company_id: null,
+  provider_name: null,
 };
 
 function friendly(message: string) {
@@ -84,11 +88,12 @@ export async function saveEinvoiceSettings(businessId: string, s: EinvoiceSettin
   if (!supabase) return 'Sin nube';
   const row: Record<string, unknown> = { ...s, business_id: businessId, updated_at: new Date().toISOString() };
   // Los campos de secuencias solo se envían si se usan (así funciona aunque falte 0013).
-  for (const k of ['seq32_next', 'seq32_due', 'seq31_next', 'seq31_due', 'provider_company_id']) {
+  for (const k of ['seq32_next', 'seq32_due', 'seq31_next', 'seq31_due', 'provider_company_id', 'provider_name']) {
     if (row[k] === null || row[k] === undefined || row[k] === '') delete row[k];
   }
   const { error } = await supabase.from('einvoice_settings').upsert(row);
   if (error) {
+    if (/provider_name/i.test(error.message)) return 'Falta un paso en Supabase: corre el archivo 0014_ecf_manual.sql.';
     if (/seq3|provider_company_id/i.test(error.message)) return 'Falta un paso en Supabase: corre el archivo 0013_secuencias_ecf.sql.';
     return /row-level|permission/i.test(error.message) ? 'Solo el dueño puede cambiar esto.' : friendly(error.message);
   }
@@ -142,4 +147,37 @@ export async function emitInvoice(
     return { error: friendly(msg) };
   }
   return { invoice: (data as { invoice: Invoice }).invoice };
+}
+
+/** Guarda la factura que el negocio ya emitió en su proveedor (registro manual). */
+export async function recordManualInvoice(
+  orderId: string,
+  type: EcfType,
+  encf: string,
+  securityCode: string,
+  customer?: { rnc: string; name: string },
+): Promise<{ invoice?: Invoice; error?: string }> {
+  if (!supabase) return { error: 'Sin nube' };
+  const { data, error } = await supabase.rpc('record_manual_ecf', {
+    p_order: orderId,
+    p_type: type,
+    p_encf: encf,
+    p_security_code: securityCode,
+    p_customer_rnc: customer?.rnc ?? null,
+    p_customer_name: customer?.name ?? null,
+  });
+  if (error) {
+    if (/record_manual_ecf|function .* does not exist|schema cache/i.test(error.message)) {
+      return { error: 'Falta un paso en Supabase: corre el archivo 0014_ecf_manual.sql.' };
+    }
+    return { error: friendly(error.message) };
+  }
+  return { invoice: data as Invoice };
+}
+
+/** Quita una factura registrada a mano (si se escribió mal). Solo dueño o gerente. */
+export async function deleteManualInvoice(invoiceId: string): Promise<string | null> {
+  if (!supabase) return 'Sin nube';
+  const { error } = await supabase.rpc('delete_manual_ecf', { p_invoice: invoiceId });
+  return error ? friendly(error.message) : null;
 }
