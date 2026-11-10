@@ -138,6 +138,43 @@ export async function printTestTicket(shop: { businessName: string; locationName
   await printHtml(html, settings.width, estimateTicketHeightMm(order, settings));
 }
 
+/** PDF del tamaño exacto del papel térmico (ancho de 58/80 mm y largo justo). */
+async function ticketPdf(html: string, width: TicketSettings['width'], heightMm: number) {
+  const Print = await import('expo-print');
+  const pt = (mm: number) => Math.round((mm / 25.4) * 72);
+  const page = { width: pt(width === '58' ? 58 : 80), height: pt(heightMm) };
+  const sized = html.replace(/@page \{ size: [^;]+;/, `@page { size: ${width}mm ${heightMm}mm;`);
+  const { uri } = await Print.printToFileAsync({ html: sized, ...page });
+  return { uri, page };
+}
+
+/**
+ * Guarda o envía (WhatsApp, correo, Archivos) el ticket o la factura en PDF del
+ * tamaño del papel térmico. El diálogo de imprimir de Android solo tiene hojas
+ * normales (carta, A4), por eso "Guardar como PDF" desde ahí lo encoge.
+ */
+export async function shareTicketPdf(
+  db: SQLiteDatabase,
+  orderId: string,
+  shop: { businessName: string; locationName: string; cashier?: string },
+  invoice?: TicketInvoice | null,
+) {
+  const [found, settings] = await Promise.all([getTicketOrder(db, orderId), getTicketSettings(db)]);
+  if (!found) throw new Error('No se encontró la orden.');
+  const order = { ...found, invoice };
+  const html = buildReceiptHtml(order, { ...shop, channelLabel: CHANNEL_LABELS[order.channel] }, settings);
+  const heightMm = estimateTicketHeightMm(order, settings);
+  if (Platform.OS === 'web') return printHtml(html, settings.width, heightMm);
+  const { uri } = await ticketPdf(html, settings.width, heightMm);
+  const Sharing = await import('expo-sharing');
+  if (!(await Sharing.isAvailableAsync())) throw new Error('Este equipo no permite compartir archivos.');
+  await Sharing.shareAsync(uri, {
+    mimeType: 'application/pdf',
+    UTI: 'com.adobe.pdf',
+    dialogTitle: invoice?.encf ? `Factura ${invoice.encf}` : 'Ticket',
+  });
+}
+
 /**
  * Imprime solo el ticket. En el navegador de la PC, `expo-print` imprimiría la
  * pantalla completa, así que el ticket se imprime desde un marco oculto.
@@ -147,10 +184,7 @@ async function printHtml(html: string, width: TicketSettings['width'], heightMm:
     // En el teléfono se crea primero un PDF del tamaño del ticket (no tamaño carta)
     // y luego se manda a imprimir, así la impresora térmica lo recibe a su medida.
     const Print = await import('expo-print');
-    const pt = (mm: number) => Math.round((mm / 25.4) * 72);
-    const page = { width: pt(width === '58' ? 58 : 80), height: pt(heightMm) };
-    const sized = html.replace(/@page \{ size: [^;]+;/, `@page { size: ${width}mm ${heightMm}mm;`);
-    const { uri } = await Print.printToFileAsync({ html: sized, ...page });
+    const { uri, page } = await ticketPdf(html, width, heightMm);
     await Print.printAsync({ uri, ...page });
     return;
   }

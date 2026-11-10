@@ -11,7 +11,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { ECF_LABELS, emitInvoice, getEinvoiceSettings, listInvoices, refreshInvoice, type EcfType, type Invoice } from '@/invoicing/ecf';
 import { CHANNEL_LABELS, formatRD } from '@/lib/calc';
 import { getLocalProfile } from '@/db/business-profile';
-import { getTicketOrder, printInvoiceLetter, printOrderTicket, ticketNumber } from '@/printing/receipt';
+import { getTicketOrder, printInvoiceLetter, printOrderTicket, shareTicketPdf, ticketNumber } from '@/printing/receipt';
 import { pushOutbox } from '@/sync/sync';
 
 /** Detalle de una venta: reimprimir el ticket y emitir la factura electrónica. */
@@ -43,6 +43,14 @@ export default function SaleScreen() {
   async function print(invoice?: Invoice) {
     try {
       await printOrderTicket(db, id, shop, invoice ?? null);
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  async function sharePdf(invoice?: Invoice) {
+    try {
+      await shareTicketPdf(db, id, shop, invoice ?? null);
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : String(e) });
     }
@@ -134,8 +142,9 @@ export default function SaleScreen() {
                 }}
               />
             ) : null}
-            <Button icon="file-pdf-box" title="Factura en hoja carta (PDF)" onPress={() => printLetter(inv)} />
-            <Button variant="secondary" icon="printer" title="Imprimir en ticket" onPress={() => print(inv)} />
+            <Button icon="printer" title="Imprimir en ticket" onPress={() => print(inv)} />
+            <Button variant="secondary" icon="share-variant" title="Enviar o guardar PDF (tamaño ticket)" onPress={() => sharePdf(inv)} />
+            <Button variant="secondary" icon="file-pdf-box" title="Factura en hoja carta (PDF)" onPress={() => printLetter(inv)} />
           </Card>
         ))
       ) : data?.settings?.error ? (
