@@ -120,6 +120,7 @@ export function buildReceiptHtml(
   const when = `${date.toLocaleDateString('es-DO')} ${date.toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit' })}`;
   const width = s.width === '58' ? 58 : 80;
   const f = FONT_VW[s.width];
+  const mm = (v: number) => `${((v * width) / 100).toFixed(2)}mm`;
   const lines = order.items
     .map(
       (i) => `<tr><td colspan="2" class="name">${esc(i.name)}</td></tr>
@@ -133,16 +134,16 @@ export function buildReceiptHtml(
 
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 @page { size: ${width}mm 200mm; margin: 0; }
-/* Todo se mide en vw (ancho de la página), así llena el papel en el teléfono, la PC y la impresora. */
+/* Todo se mide en mm del papel, así llena el ancho exacto en el PDF, la PC y la impresora. */
 * { box-sizing: border-box; }
 html, body { height: auto; overflow: hidden; }
-body { margin: 0; padding: ${PAD_VW}vw; width: 100%; font-family: 'Courier New', monospace; font-size: ${f}vw; line-height: ${LINE}; color: #000; }
+body { margin: 0; padding: ${mm(PAD_VW)}; width: ${width}mm; font-family: 'Courier New', monospace; font-size: ${mm(f)}; line-height: ${LINE}; color: #000; }
 .c { text-align: center; } .r { text-align: right; white-space: nowrap; } .b { font-weight: bold; }
-.big { font-size: ${f * BIG}vw; font-weight: bold; } .muted { color: #000; }
-hr { border: 0; border-top: 1px dashed #000; margin: ${HR_VW}vw 0; }
+.big { font-size: ${mm(f * BIG)}; font-weight: bold; } .muted { color: #000; }
+hr { border: 0; border-top: 1px dashed #000; margin: ${mm(HR_VW)} 0; }
 table { width: 100%; border-collapse: collapse; } td { padding: 0; vertical-align: top; }
-.name { padding-top: ${NAME_VW}vw; }
-.qr { width: ${QR_VW}vw; margin: ${HR_VW}vw auto; } .qr svg { width: 100%; height: auto; display: block; }
+.name { padding-top: ${mm(NAME_VW)}; }
+.qr { width: ${mm(QR_VW)}; margin: ${mm(HR_VW)} auto; } .qr svg { width: 100%; height: auto; display: block; }
 </style></head><body>
 <div class="c big">${esc(shop.businessName)}</div>
 <div class="c">${esc(shop.locationName)}</div>
@@ -181,7 +182,7 @@ ${order.invoice.provider === 'manual' ? '' : `<div class="c">Fecha de firma: ${e
 ${order.invoice?.environment === 'prueba' ? `<div class="c b">MODO PRUEBA · NO VÁLIDO ANTE LA DGII</div>` : ''}
 ${s.footer ? `<div class="c">${esc(s.footer)}</div>` : ''}
 ${order.invoice ? '' : '<div class="c" style="margin-top:4px">Este documento no es un comprobante fiscal</div>'}
-<div style="height:${END_VW}vw"></div>
+<div style="height:${mm(END_VW)}"></div>
 </body></html>`;
 }
 
@@ -203,19 +204,23 @@ export function estimateTicketHeightMm(order: TicketOrder, s: TicketSettings) {
   const f = FONT_VW[s.width];
   const line = f * LINE * vw;
   const charsPerLine = Math.floor((100 - 2 * PAD_VW) / (f * 0.6));
-  const itemLines = order.items.reduce((n, i) => n + Math.ceil(i.name.length / charsPerLine) + 1, 0);
+  const wrap = (t?: string | null) => (t ? Math.max(1, Math.ceil(t.length / charsPerLine)) : 0);
+  const inv = order.invoice;
+  const itemLines = order.items.reduce((n, i) => n + wrap(i.name) + 1, 0);
   const lines =
-    1 + [s.rnc, s.address, s.phone].filter(Boolean).length + // local y datos del negocio
-    4 + (order.external_ref ? 1 : 0) + // título, orden, fecha, tipo
-    1 + // atendió (si aplica; se deja espacio)
+    1 + wrap(s.legalName) + (s.rnc ? 1 : 0) + wrap(s.address) + (s.phone ? 1 : 0) + // local y datos del negocio
+    wrap(inv ? ECF_TITLES[inv.ecf_type] ?? 'COMPROBANTE FISCAL ELECTRÓNICO' : 'COMPROBANTE DE VENTA') +
+    (inv ? 1 + (inv.customer_rnc ? 1 : 0) + wrap(inv.customer_name) : 0) +
+    3 + (order.external_ref ? 1 : 0) + 1 + // orden, fecha, tipo, pedido, atendió
     itemLines +
     3 + (order.discount ? 1 : 0) + (order.tip_law ? 1 : 0) + (order.cash_received ? 2 : 0) + // totales y pago
-    (s.footer ? 1 : 0) + 2 + // pie
-    (order.invoice ? 4 + (order.invoice.customer_rnc ? 2 : 0) + (order.invoice.environment === 'prueba' ? 2 : 0) : 0); // e-CF
-  const qr = order.invoice ? (QR_VW + 2 * HR_VW) * vw : 0;
+    (inv ? (inv.security_code ? 1 : 0) + (inv.provider === 'manual' ? 0 : 1) + (inv.environment === 'prueba' ? wrap('MODO PRUEBA · NO VÁLIDO ANTE LA DGII') : 0) : 0) +
+    wrap(s.footer) +
+    (inv ? 0 : wrap('Este documento no es un comprobante fiscal'));
+  const qr = inv ? (QR_VW + 2 * HR_VW) * vw : 0;
   const bigLines = 2 * line * BIG; // nombre del negocio y TOTAL
   const extras = 5 * (2 * HR_VW * vw + 0.3) + order.items.length * NAME_VW * vw + (2 * PAD_VW + END_VW) * vw;
-  return Math.ceil(lines * line + bigLines + extras + qr + 2);
+  return Math.ceil(lines * line + bigLines + extras + qr + 3);
 }
 
 /**
