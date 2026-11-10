@@ -1,6 +1,6 @@
 import { router, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { Alert, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Text } from '@/components/text';
 
@@ -12,7 +12,6 @@ import { getReport, listRecentOrders, listStock, pendingSyncCount, ROLE_LABELS }
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { CHANNEL_LABELS, formatRD } from '@/lib/calc';
-import { printOrderTicket, ticketNumber } from '@/printing/receipt';
 
 function greeting(d = new Date()) {
   const h = d.getHours();
@@ -130,19 +129,8 @@ export default function HomeScreen() {
           <Pressable
             key={o.id}
             accessibilityRole="button"
-            accessibilityLabel={`Reimprimir ticket de ${formatRD(o.total)}`}
-            onPress={() =>
-              Alert.alert(`Orden #${ticketNumber(o.id)}`, `${CHANNEL_LABELS[o.channel]} · ${formatRD(o.total)}`, [
-                { text: 'Cerrar', style: 'cancel' },
-                {
-                  text: 'Imprimir ticket',
-                  onPress: () =>
-                    printOrderTicket(db, o.id, { businessName: ctx.businessName, locationName: ctx.locationName }).catch((e) =>
-                      Alert.alert('No se pudo imprimir', e instanceof Error ? e.message : String(e)),
-                    ),
-                },
-              ])
-            }
+            accessibilityLabel={`Ver venta de ${formatRD(o.total)}`}
+            onPress={() => router.push({ pathname: '/venta/[id]', params: { id: o.id } })}
             style={[styles.order, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}>
             <IconBadge name={CHANNEL_ICONS[o.channel]} color={ChannelColors[o.channel]} size={38} />
             <View style={{ flex: 1 }}>
@@ -152,7 +140,7 @@ export default function HomeScreen() {
               </Label>
             </View>
             <Label bold size={16}>{formatRD(o.total)}</Label>
-            <Icon name="printer-outline" size={18} color={t.textSecondary} />
+            <Icon name="chevron-right" size={20} color={t.textSecondary} />
           </Pressable>
         ))}
       </Card>

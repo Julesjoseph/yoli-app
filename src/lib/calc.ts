@@ -16,6 +16,11 @@ export const CHANNEL_LABELS: Record<Channel, string> = {
 
 export const DELIVERY_CHANNELS: Channel[] = ['pedidosya', 'ubereats'];
 
+/** ITBIS de un producto en un canal: puede estar exento solo en PedidosYa / Uber Eats. */
+export function itbisFor(p: { itbis_rate: number; delivery_itbis_exempt?: number | boolean | null }, channel: Channel) {
+  return DELIVERY_CHANNELS.includes(channel) && p.delivery_itbis_exempt ? 0 : p.itbis_rate;
+}
+
 export const TIP_LAW_RATE = 0.1;
 
 export interface CartLine {

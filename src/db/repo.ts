@@ -7,6 +7,7 @@ import {
   buildProfitReport,
   computeOrderTotals,
   ingredientUsage,
+  itbisFor,
   priceFor,
   round2,
   type Channel,
@@ -23,6 +24,8 @@ export interface Product {
   image_url: string | null;
   price_pedidosya: number | null;
   price_ubereats: number | null;
+  /** 1 = no se cobra ITBIS en PedidosYa / Uber Eats (aunque en el local sí). */
+  delivery_itbis_exempt?: number | null;
   /** Cuántas opciones para elegir tiene (si es combo con acompañantes). */
   choices?: number;
   /** En un combo ya armado: el producto real y los productos que eligió el cliente. */
@@ -111,7 +114,7 @@ export const listCategories = (db: SQLiteDatabase) =>
 
 export const listProducts = (db: SQLiteDatabase) =>
   db.getAllAsync<Product>(
-    `SELECT id, category_id, name, price, itbis_rate, image_url, price_pedidosya, price_ubereats,
+    `SELECT id, category_id, name, price, itbis_rate, image_url, price_pedidosya, price_ubereats, delivery_itbis_exempt,
        (SELECT COUNT(*) FROM combo_items c WHERE c.product_id = products.id AND c.group_name <> '') AS choices
      FROM products WHERE active = 1 ORDER BY name`,
   );
@@ -145,7 +148,7 @@ export async function recordSale(
 ) {
   const rates = await getCommissionRates(db, ctx.businessId);
   const totals = computeOrderTotals(
-    input.lines.map((l) => ({ unitPrice: priceFor(l.product, input.channel), quantity: l.quantity, itbisRate: l.product.itbis_rate })),
+    input.lines.map((l) => ({ unitPrice: priceFor(l.product, input.channel), quantity: l.quantity, itbisRate: itbisFor(l.product, input.channel) })),
     input.channel,
     { commissionRate: rates[input.channel] ?? 0, applyTipLaw: input.applyTipLaw, discount: input.discount },
   );

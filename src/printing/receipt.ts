@@ -4,7 +4,13 @@ import { Platform } from 'react-native';
 import { getSetting, setSettings } from '@/db/database';
 import { CHANNEL_LABELS, type Channel } from '@/lib/calc';
 
-import { buildReceiptHtml, estimateTicketHeightMm, type TicketOrder as BaseOrder, type TicketSettings } from './receipt-html';
+import {
+  buildReceiptHtml,
+  estimateTicketHeightMm,
+  type TicketInvoice,
+  type TicketOrder as BaseOrder,
+  type TicketSettings,
+} from './receipt-html';
 
 export { ticketNumber, type TicketSettings } from './receipt-html';
 export type TicketOrder = BaseOrder & { channel: Channel };
@@ -72,9 +78,11 @@ export async function printOrderTicket(
   db: SQLiteDatabase,
   orderId: string,
   shop: { businessName: string; locationName: string; cashier?: string },
+  invoice?: TicketInvoice | null,
 ) {
-  const [order, settings] = await Promise.all([getTicketOrder(db, orderId), getTicketSettings(db)]);
-  if (!order) throw new Error('No se encontró la orden.');
+  const [found, settings] = await Promise.all([getTicketOrder(db, orderId), getTicketSettings(db)]);
+  if (!found) throw new Error('No se encontró la orden.');
+  const order = { ...found, invoice };
   const html = buildReceiptHtml(order, { ...shop, channelLabel: CHANNEL_LABELS[order.channel] }, settings);
   await printHtml(html, settings.width, estimateTicketHeightMm(order, settings));
 }

@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
 import type { PaymentMethod, Product } from '@/db/repo';
-import { computeOrderTotals, DELIVERY_CHANNELS, priceFor, round2, type Channel } from '@/lib/calc';
+import { computeOrderTotals, DELIVERY_CHANNELS, itbisFor, priceFor, round2, type Channel } from '@/lib/calc';
 
 export interface Discount {
   kind: 'pct' | 'monto';
@@ -51,7 +51,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const lines = Object.values(items);
   const totals = useMemo(() => {
-    const cartLines = lines.map((l) => ({ unitPrice: priceFor(l.product, channel), quantity: l.quantity, itbisRate: l.product.itbis_rate }));
+    const cartLines = lines.map((l) => ({ unitPrice: priceFor(l.product, channel), quantity: l.quantity, itbisRate: itbisFor(l.product, channel) }));
     const full = cartLines.reduce((n, l) => n + l.unitPrice * l.quantity, 0);
     const amount = DELIVERY_CHANNELS.includes(channel)
       ? 0

@@ -130,6 +130,7 @@ export default function CatalogScreen() {
                           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
                             {!p.active ? <Pill text="OCULTO" color={t.textSecondary} /> : null}
                             {p.price_pedidosya || p.price_ubereats ? <Pill text="PRECIO DELIVERY" color={t.info} /> : null}
+                            {p.delivery_itbis_exempt ? <Pill text="DELIVERY SIN ITBIS" color={t.success} /> : null}
                             {margin !== null ? (
                               <Pill text={`MARGEN ${margin}%`} color={margin >= 50 ? t.success : margin >= 25 ? t.accent : t.danger} />
                             ) : (

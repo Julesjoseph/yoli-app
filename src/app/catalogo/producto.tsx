@@ -58,6 +58,7 @@ export default function ProductScreen() {
   const [category, setCategory] = useState<string>('');
   const [itbis, setItbis] = useState('0.18');
   const [active, setActive] = useState(true);
+  const [deliveryExempt, setDeliveryExempt] = useState(false);
   const [recipe, setRecipe] = useState<{ ingredient_id: string; quantity: string }[]>([]);
   const [adding, setAdding] = useState(false);
   const [creatingIngredient, setCreatingIngredient] = useState(false);
@@ -96,6 +97,7 @@ export default function ProductScreen() {
           setCategory(p.category_id ?? '');
           setItbis(String(p.itbis_rate));
           setActive(!!p.active);
+          setDeliveryExempt(!!p.delivery_itbis_exempt);
           setSavedImage(p.image_url);
         }
         const r = await getRecipe(db, id);
@@ -172,6 +174,7 @@ export default function ProductScreen() {
           image_url: image,
           price_pedidosya: pricePy.trim() ? num(pricePy) : null,
           price_ubereats: priceUe.trim() ? num(priceUe) : null,
+          delivery_itbis_exempt: deliveryExempt,
         },
         recipe.map((r) => ({ ingredient_id: r.ingredient_id, quantity: num(r.quantity || '0') })),
         [
@@ -228,8 +231,25 @@ export default function ProductScreen() {
             <Field label="Uber Eats (RD$)" icon="truck-delivery-outline" keyboardType="decimal-pad" value={priceUe} onChangeText={setPriceUe} placeholder={price || '0.00'} />
           </View>
         </View>
-        <Label muted size={13}>Impuesto</Label>
+        <Label muted size={13}>Impuesto en el local</Label>
         <Chips options={ITBIS} value={itbis} onChange={setItbis} />
+        <Row>
+          <View style={{ flex: 1 }}>
+            <Label bold size={15}>Sin ITBIS en PedidosYa y Uber Eats</Label>
+            <Label muted size={13}>
+              {deliveryExempt
+                ? 'En delivery este producto se vende exento. En el local sigue con el impuesto de arriba.'
+                : 'Actívalo si en delivery este producto va exonerado de ITBIS.'}
+            </Label>
+          </View>
+          <Switch
+            value={deliveryExempt}
+            onValueChange={setDeliveryExempt}
+            disabled={itbis === '0'}
+            trackColor={{ true: t.primary, false: t.backgroundSelected }}
+            thumbColor="#FFFFFF"
+          />
+        </Row>
         <Label muted size={13}>Categoría</Label>
         <Chips
           options={[...categories.map((c) => ({ value: c.id, label: c.name, icon: foodIcon(c.name) })), { value: '', label: 'Sin categoría' }]}

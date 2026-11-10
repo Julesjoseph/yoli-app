@@ -9,7 +9,7 @@ import { loadDemoActivity } from './demo';
  * Las columnas tienen los mismos nombres que en Supabase para que la
  * sincronización envíe las filas tal cual.
  */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 export async function migrate(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -33,6 +33,8 @@ export async function migrate(db: SQLiteDatabase) {
         ALTER TABLE orders ADD COLUMN change_given REAL;
       `);
     }
+    // v6: ITBIS exento solo en delivery
+    if (current < 6) await db.execAsync(`ALTER TABLE products ADD COLUMN delivery_itbis_exempt INTEGER DEFAULT 0;`);
     // v5: combos con acompañantes
     if (current < 5) {
       await db.execAsync(`
@@ -62,7 +64,7 @@ export async function migrate(db: SQLiteDatabase) {
     CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY, business_id TEXT NOT NULL, category_id TEXT, name TEXT NOT NULL,
       price REAL NOT NULL, itbis_rate REAL NOT NULL DEFAULT 0.18, active INTEGER NOT NULL DEFAULT 1,
-      image_url TEXT, price_pedidosya REAL, price_ubereats REAL
+      image_url TEXT, price_pedidosya REAL, price_ubereats REAL, delivery_itbis_exempt INTEGER DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS ingredients (
       id TEXT PRIMARY KEY, business_id TEXT NOT NULL, name TEXT NOT NULL, unit TEXT NOT NULL,

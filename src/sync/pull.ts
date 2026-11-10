@@ -51,7 +51,7 @@ export async function pullCatalog(db: SQLiteDatabase, businessId: string) {
     }
     await insertRows(db, 'locations', locations, ['id', 'business_id', 'name', 'kind']);
     await insertRows(db, 'categories', categories, ['id', 'business_id', 'name', 'sort_order']);
-    await insertRows(db, 'products', products, ['id', 'business_id', 'category_id', 'name', 'price', 'itbis_rate', 'active', 'image_url', 'price_pedidosya', 'price_ubereats']);
+    await insertRows(db, 'products', products, ['id', 'business_id', 'category_id', 'name', 'price', 'itbis_rate', 'active', 'image_url', 'price_pedidosya', 'price_ubereats', 'delivery_itbis_exempt']);
     await insertRows(db, 'ingredients', ingredients, ['id', 'business_id', 'name', 'unit', 'cost_per_unit', 'min_stock']);
     await insertRows(db, 'recipe_items', recipes, ['product_id', 'ingredient_id', 'quantity']);
     if (combos) {

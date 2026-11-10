@@ -34,7 +34,15 @@ begin
   assert stock_after = stock_before, 'inventario devuelto';
   assert ingest_pedidosya_order(p || '{"client":{"id":"OTRA"}}') like 'tienda no enlazada%', 'sin enlace';
 
-  delete from orders where external_ref = 'ABC123';
+  -- Con el Refresco exento de ITBIS en delivery: 590 lleva ITBIS, 80 no.
+  update products set delivery_itbis_exempt = true where business_id = v_biz and name = 'Refresco';
+  r := ingest_pedidosya_order(p || '{"order_id":"PY-TEST-2","order_code":"ABC124"}');
+  assert r = 'creada', r;
+  select count(*) into n from orders where external_ref = 'ABC124' and subtotal = round(80 + 590 / 1.18, 2) and itbis = 90;
+  assert n = 1, 'ITBIS exento en delivery';
+  update products set delivery_itbis_exempt = false where business_id = v_biz and name = 'Refresco';
+
+  delete from orders where external_ref in ('ABC123', 'ABC124');
   delete from delivery_links where vendor_id = 'TEST-VENDOR';
   raise notice 'PRUEBAS PEDIDOSYA OK';
 end $$;

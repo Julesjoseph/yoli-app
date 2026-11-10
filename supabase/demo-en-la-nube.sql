@@ -63,6 +63,12 @@ begin
   end if;
   insert into platform_commissions (business_id, platform_id, commission_rate)
     values (v_biz, 'pedidosya', 0.25), (v_biz, 'ubereats', 0.30);
+  -- Factura electrónica en modo prueba para el demo (si ya existe, migración 0012).
+  update businesses set rnc = '131000001', legal_name = 'Negocio Demo SRL' where id = v_biz;
+  if to_regclass('public.einvoice_settings') is not null then
+    execute 'insert into einvoice_settings (business_id, provider, environment, enabled) values ($1, ''prueba'', ''prueba'', true)
+             on conflict (business_id) do nothing' using v_biz;
+  end if;
 
   -- Menú de ejemplo
   for i in 1..4 loop

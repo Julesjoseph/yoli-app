@@ -1,7 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { computeOrderTotals, ingredientUsage, priceFor, type Channel } from '@/lib/calc';
+import { computeOrderTotals, ingredientUsage, itbisFor, priceFor, type Channel } from '@/lib/calc';
 
 import { addExpense, addStock, getCommissionRates, listProducts, listStock, type Context, type PaymentMethod } from './repo';
 
@@ -67,7 +67,7 @@ export async function loadDemoActivity(db: SQLiteDatabase, ctx: Context, now = n
           [...lines.values()].map((l) => ({
             unitPrice: priceFor(l.product, channel),
             quantity: l.quantity,
-            itbisRate: l.product.itbis_rate,
+            itbisRate: itbisFor(l.product, channel),
           })),
           channel,
           { commissionRate: rates[channel] ?? 0, applyTipLaw: channel === 'local', discount: channel === 'local' && rand() < 0.1 ? 50 : 0 },

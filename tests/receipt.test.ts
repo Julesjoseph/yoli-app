@@ -36,3 +36,20 @@ test('ticket: muestra efectivo recibido y devuelta', () => {
   assert.match(html, /Recibido<\/td><td class="r">RD\$ 500\.00/);
   assert.match(html, /Devuelta<\/td><td class="r b">RD\$ 180\.00/);
 });
+
+test('ticket con factura electrónica', async () => {
+  const { buildReceiptHtml } = await import('../src/printing/receipt-html.ts');
+  const html = buildReceiptHtml(
+    {
+      id: 'abc', channel: 'local', external_ref: null, subtotal: 100, itbis: 18, tip_law: 10, total: 128,
+      payment_method: 'efectivo', created_at: new Date().toISOString(), items: [{ name: 'Café', unit_price: 118, quantity: 1 }],
+      invoice: { ecf_type: '31', encf: 'E310000000001', customer_rnc: '131234567', customer_name: 'Empresa SRL', security_code: 'AB12CD', environment: 'prueba' },
+    },
+    { businessName: 'Yoli', locationName: 'Centro' },
+    { rnc: '101', address: '', phone: '', footer: '', width: '80', autoPrint: false },
+  );
+  for (const x of ['FACTURA DE CRÉDITO FISCAL ELECTRÓNICA', 'E310000000001', '131234567', 'Empresa SRL', 'AB12CD', 'MODO PRUEBA']) {
+    assert.ok(html.includes(x), x);
+  }
+  assert.ok(!html.includes('no es un comprobante fiscal'));
+});

@@ -26,7 +26,23 @@ export interface TicketOrder {
   change_given?: number | null;
   created_at: string;
   items: { name: string; unit_price: number; quantity: number }[];
+  /** Factura electrónica (e-CF) de esta venta, si se emitió. */
+  invoice?: TicketInvoice | null;
 }
+
+export interface TicketInvoice {
+  ecf_type: string;
+  encf: string | null;
+  customer_rnc: string | null;
+  customer_name: string | null;
+  security_code: string | null;
+  environment: string | null;
+}
+
+const ECF_TITLES: Record<string, string> = {
+  '31': 'FACTURA DE CRÉDITO FISCAL ELECTRÓNICA',
+  '32': 'FACTURA DE CONSUMO ELECTRÓNICA',
+};
 
 const PAYMENT_LABELS: Record<string, string> = {
   efectivo: 'Efectivo',
@@ -77,7 +93,12 @@ table { width: 100%; border-collapse: collapse; } td { padding: 0; vertical-alig
 <div class="c">${esc(shop.locationName)}</div>
 <div class="c">${header}</div>
 <hr>
-<div class="c b">COMPROBANTE DE VENTA</div>
+<div class="c b">${order.invoice ? ECF_TITLES[order.invoice.ecf_type] ?? 'COMPROBANTE FISCAL ELECTRÓNICO' : 'COMPROBANTE DE VENTA'}</div>
+${order.invoice ? `<table>
+<tr><td>e-NCF</td><td class="r b">${esc(order.invoice.encf ?? '')}</td></tr>
+${order.invoice.customer_rnc ? `<tr><td>RNC cliente</td><td class="r">${esc(order.invoice.customer_rnc)}</td></tr>` : ''}
+${order.invoice.customer_name ? `<tr><td colspan="2">${esc(order.invoice.customer_name)}</td></tr>` : ''}
+</table>` : ''}
 <table>
 <tr><td>Orden</td><td class="r">#${ticketNumber(order.id)}</td></tr>
 <tr><td>Fecha</td><td class="r">${esc(when)}</td></tr>
@@ -99,8 +120,10 @@ ${order.cash_received ? `<tr><td>Recibido</td><td class="r">${money(order.cash_r
 <tr><td class="b">Devuelta</td><td class="r b">${money(order.change_given ?? 0)}</td></tr>` : ''}
 </table>
 <hr>
+${order.invoice?.security_code ? `<div class="c">Código de seguridad: ${esc(order.invoice.security_code)}</div>` : ''}
+${order.invoice?.environment === 'prueba' ? `<div class="c b">MODO PRUEBA · NO VÁLIDO ANTE LA DGII</div>` : ''}
 ${s.footer ? `<div class="c">${esc(s.footer)}</div>` : ''}
-<div class="c" style="margin-top:4px">Este documento no es un comprobante fiscal</div>
+${order.invoice ? '' : '<div class="c" style="margin-top:4px">Este documento no es un comprobante fiscal</div>'}
 <div style="height:${END_VW}vw"></div>
 </body></html>`;
 }
@@ -129,7 +152,8 @@ export function estimateTicketHeightMm(order: TicketOrder, s: TicketSettings) {
     1 + // atendió (si aplica; se deja espacio)
     itemLines +
     3 + (order.discount ? 1 : 0) + (order.tip_law ? 1 : 0) + (order.cash_received ? 2 : 0) + // totales y pago
-    (s.footer ? 1 : 0) + 2; // pie
+    (s.footer ? 1 : 0) + 2 + // pie
+    (order.invoice ? 3 + (order.invoice.customer_rnc ? 2 : 0) + (order.invoice.environment === 'prueba' ? 2 : 0) : 0); // e-CF
   const bigLines = 2 * line * BIG; // nombre del negocio y TOTAL
   const extras = 5 * (2 * HR_VW * vw + 0.3) + order.items.length * NAME_VW * vw + (2 * PAD_VW + END_VW) * vw;
   return Math.ceil(lines * line + bigLines + extras + 2);

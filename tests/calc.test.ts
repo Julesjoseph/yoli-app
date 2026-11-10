@@ -76,3 +76,16 @@ test('precio por canal: PedidosYa y Uber Eats usan su precio si lo tienen', () =
   assert.equal(priceFor(p, 'pedidosya'), 125);
   assert.equal(priceFor(p, 'ubereats'), 100);
 });
+
+test('ITBIS exento solo en delivery', async () => {
+  const { itbisFor } = await import('../src/lib/calc.ts');
+  const p = { itbis_rate: 0.18, delivery_itbis_exempt: 1 };
+  assert.equal(itbisFor(p, 'local'), 0.18);
+  assert.equal(itbisFor(p, 'para_llevar'), 0.18);
+  assert.equal(itbisFor(p, 'pedidosya'), 0);
+  assert.equal(itbisFor(p, 'ubereats'), 0);
+  assert.equal(itbisFor({ itbis_rate: 0.18 }, 'pedidosya'), 0.18);
+  const t = computeOrderTotals([{ unitPrice: 300, quantity: 1, itbisRate: itbisFor(p, 'pedidosya') }], 'pedidosya', { commissionRate: 0.25 });
+  assert.equal(t.itbis, 0);
+  assert.equal(t.subtotal, 300);
+});
