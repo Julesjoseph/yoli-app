@@ -20,5 +20,5 @@ export const DEMO_PASSWORD = 'YoliDemo-2026';
  * Contacto de YOLI para que los clientes renueven su suscripción.
  * WhatsApp en formato internacional sin "+" ni espacios (ej. '18095551234'). Vacío = no se muestra.
  */
-export const SUPPORT_WHATSAPP = '';
+export const SUPPORT_WHATSAPP = '18293128468';
 export const SUPPORT_EMAIL = '';
