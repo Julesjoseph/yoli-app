@@ -52,6 +52,7 @@ export default function SettingsScreen() {
           { icon: 'receipt-text-outline' as const, label: 'Gastos', hint: 'Compras, nómina y servicios', onPress: () => router.push('/gastos') },
           { icon: 'chart-box-outline' as const, label: 'Reportes', hint: 'Ventas, costos y ganancia', onPress: () => router.push('/reportes') },
           { icon: 'file-certificate-outline' as const, label: 'Factura electrónica', hint: 'e-CF de la DGII con tu proveedor autorizado', onPress: () => router.push('/factura-electronica') },
+          { icon: 'moped-outline' as const, label: 'PedidosYa', hint: 'Enlaza tus locales para que los pedidos entren solos', onPress: () => router.push('/pedidosya') },
         ]
       : []),
     { icon: 'package-variant', label: 'Inventario', hint: 'Stock e insumos del local', onPress: () => router.push('/inventario') },
