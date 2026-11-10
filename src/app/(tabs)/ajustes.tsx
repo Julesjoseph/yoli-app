@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
@@ -43,6 +44,7 @@ export default function SettingsScreen() {
 
   const userName = (auth.session?.user.user_metadata?.name as string | undefined) ?? '';
   const menu: { icon: IconName; label: string; hint: string; onPress: () => void }[] = [
+    { icon: 'card-account-details-outline', label: 'Perfil del negocio', hint: 'Logo, nombre comercial, RNC, teléfono y dirección', onPress: () => router.push('/negocio') },
     { icon: 'storefront-outline', label: ctx.businessName, hint: ctx.demo ? `Local: ${ctx.locationName}` : `${ctx.locationName} · toca para cambiar de local`, onPress: () => { if (!ctx.demo) changeLocation(); } },
     ...(manager
       ? [
@@ -76,10 +78,17 @@ export default function SettingsScreen() {
   return (
     <Screen title="Perfil">
       <View style={{ alignItems: 'center', gap: 6, paddingVertical: 4 }}>
-        <View style={[styles.avatar, { backgroundColor: t.brand }]}>
-          <Text style={styles.avatarText}>{initials(userName || ctx.businessName)}</Text>
-        </View>
-        <Label bold size={20} numberOfLines={1}>{userName || ctx.businessName}</Label>
+        <Pressable accessibilityRole="button" accessibilityLabel="Perfil del negocio" onPress={() => router.push('/negocio')}>
+          {ctx.businessLogo ? (
+            <Image source={{ uri: ctx.businessLogo }} style={[styles.avatar, { borderWidth: 1, borderColor: t.border }]} contentFit="cover" />
+          ) : (
+            <View style={[styles.avatar, { backgroundColor: t.brand }]}>
+              <Text style={styles.avatarText}>{initials(ctx.businessName || userName)}</Text>
+            </View>
+          )}
+        </Pressable>
+        <Label bold size={20} numberOfLines={1}>{ctx.businessName}</Label>
+        {userName ? <Label size={15} numberOfLines={1}>{userName}</Label> : null}
         {!ctx.demo && auth.session?.user.email ? <Label muted size={14}>{auth.session.user.email}</Label> : null}
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 2 }}>
           <Pill text={ROLE_LABELS[ctx.role].toUpperCase()} color={t.primary} />
@@ -369,7 +378,7 @@ function Staff() {
 }
 
 const styles = StyleSheet.create({
-  avatar: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  avatar: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 4, overflow: 'hidden' },
   avatarText: { color: '#FFFFFF', fontSize: 32, fontWeight: '900' },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
   menuIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

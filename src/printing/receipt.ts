@@ -25,13 +25,18 @@ export const DEFAULT_TICKET: TicketSettings = {
 };
 
 export async function getTicketSettings(db: SQLiteDatabase): Promise<TicketSettings> {
-  const [rnc, address, phone, footer, width, autoPrint] = await Promise.all(
-    ['ticket_rnc', 'ticket_address', 'ticket_phone', 'ticket_footer', 'ticket_width', 'ticket_auto'].map((k) => getSetting(db, k)),
+  const [rnc, address, phone, footer, width, autoPrint, bizLegal, bizRnc, bizAddress, bizPhone] = await Promise.all(
+    [
+      'ticket_rnc', 'ticket_address', 'ticket_phone', 'ticket_footer', 'ticket_width', 'ticket_auto',
+      'biz_legal_name', 'biz_rnc', 'biz_address', 'biz_phone',
+    ].map((k) => getSetting(db, k)),
   );
+  // Lo que esté vacío en el ticket se toma del Perfil del negocio.
   return {
-    rnc: rnc ?? DEFAULT_TICKET.rnc,
-    address: address ?? DEFAULT_TICKET.address,
-    phone: phone ?? DEFAULT_TICKET.phone,
+    legalName: bizLegal ?? '',
+    rnc: rnc || bizRnc || DEFAULT_TICKET.rnc,
+    address: address || bizAddress || DEFAULT_TICKET.address,
+    phone: phone || bizPhone || DEFAULT_TICKET.phone,
     footer: footer ?? DEFAULT_TICKET.footer,
     width: width === '58' ? '58' : '80',
     autoPrint: autoPrint === '1',

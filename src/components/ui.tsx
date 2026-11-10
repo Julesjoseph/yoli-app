@@ -288,10 +288,10 @@ export function Chips<T extends string>({
   return <View style={styles.chips}>{chips}</View>;
 }
 
-export function Field(props: TextInputProps & { label: string; icon?: IconName }) {
+export function Field(props: TextInputProps & { label: string; icon?: IconName; right?: ReactNode }) {
   const t = useTheme();
   const [focused, setFocused] = useState(false);
-  const { label, style, icon, ...rest } = props;
+  const { label, style, icon, right, ...rest } = props;
   return (
     <View style={{ gap: 6 }}>
       <Text style={{ color: t.textSecondary, fontSize: 13, fontWeight: '700', letterSpacing: 0.3 }}>
@@ -316,6 +316,7 @@ export function Field(props: TextInputProps & { label: string; icon?: IconName }
           style={[styles.input, { color: t.text }, style]}
           {...rest}
         />
+        {right}
       </View>
     </View>
   );

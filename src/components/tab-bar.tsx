@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
@@ -129,16 +130,29 @@ function Sidebar({ state, navigateToTab, hidden }: BottomTabBarProps & { hidden:
         ))}
       </View>
       <View style={{ flex: 1 }} />
-      <View style={[styles.sideFooter, { backgroundColor: t.navHover }]}>
-        <Text style={{ color: t.navText, fontWeight: '800' }} numberOfLines={1}>{ctx.businessName}</Text>
-        <Text style={{ color: t.navMuted, fontSize: 12 }} numberOfLines={1}>{ctx.locationName}</Text>
-      </View>
+      <Pressable
+        accessibilityRole="link"
+        onPress={() => router.push('/negocio')}
+        style={[styles.sideFooter, { backgroundColor: t.navHover, flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
+        {ctx.businessLogo ? (
+          <Image source={{ uri: ctx.businessLogo }} style={styles.sideLogo} contentFit="cover" />
+        ) : (
+          <View style={[styles.sideLogo, { backgroundColor: t.navActiveBg, alignItems: 'center', justifyContent: 'center' }]}>
+            <Icon name="storefront-outline" size={18} color={t.navActiveText} />
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: t.navText, fontWeight: '800' }} numberOfLines={1}>{ctx.businessName}</Text>
+          <Text style={{ color: t.navMuted, fontSize: 12 }} numberOfLines={1}>{ctx.locationName}</Text>
+        </View>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   side: { width: 232, paddingHorizontal: 14, paddingBottom: 16, borderRightWidth: StyleSheet.hairlineWidth },
+  sideLogo: { width: 36, height: 36, borderRadius: 10, overflow: 'hidden' },
   sideItem: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, paddingVertical: 11, paddingHorizontal: 12 },
   sideText: { fontWeight: '800', fontSize: 15, flex: 1 },
   sideBadge: { minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },

@@ -22,3 +22,9 @@ export const DEMO_PASSWORD = 'YoliDemo-2026';
  */
 export const SUPPORT_WHATSAPP = '18293128468';
 export const SUPPORT_EMAIL = '';
+
+/** Dirección de la versión web (para los enlaces de los correos). */
+export const SITE_URL = 'https://yoli-app.netlify.app';
+
+/** Mostrar "Continuar con Google" (activar primero Google en Supabase › Authentication › Sign In / Providers). */
+export const GOOGLE_LOGIN = false;

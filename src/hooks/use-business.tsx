@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { AppState } from 'react-native';
 
 import { useAuth } from '@/auth/auth';
+import { pullProfile } from '@/db/business-profile';
 import { ensureDemoData, getSetting, resetLocalData, setSettings } from '@/db/database';
 import { getContext, type Context, type Role } from '@/db/repo';
 import { pullCatalog, pullLocationActivity } from '@/sync/pull';
@@ -50,6 +51,8 @@ interface BusinessState {
   /** Sube cada vez que llegan cambios de la nube: las pantallas se recargan solas. */
   syncTick: number;
   reload(): void;
+  /** Vuelve a leer nombre/logo del negocio del equipo (después de editar el perfil). */
+  refreshContext(): Promise<void>;
 }
 
 const BusinessContext = createContext<BusinessState | null>(null);
@@ -175,6 +178,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
         await setSettings(db, { location_name: current.name });
       }
 
+      await pullProfile(db, businessId).catch(() => undefined);
       const ctx = await getContext(db);
       if (!ctx) return set({ kind: 'error', message: 'Tu negocio no tiene locales activos.' });
       await pushOutbox(db).catch(() => undefined);
@@ -259,6 +263,10 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
     plan,
     isAdmin,
     reload,
+    async refreshContext() {
+      const ctx = await getContext(db);
+      if (ctx) setPhase((p) => (p.kind === 'ready' ? { kind: 'ready', ctx } : p));
+    },
     async chooseLocation(loc) {
       await setSettings(db, { location_id: loc.id, location_name: loc.name });
       reload();

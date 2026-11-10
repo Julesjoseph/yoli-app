@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 import { SUPABASE_KEY, SUPABASE_URL } from './config';
 
@@ -17,7 +18,8 @@ export const supabase: SupabaseClient | null =
           storage: canPersist ? AsyncStorage : undefined,
           autoRefreshToken: canPersist,
           persistSession: canPersist,
-          detectSessionInUrl: false,
+          // En la web se lee la sesión del enlace (confirmar correo, nueva contraseña, Google).
+          detectSessionInUrl: Platform.OS === 'web' && canPersist,
         },
       })
     : null;

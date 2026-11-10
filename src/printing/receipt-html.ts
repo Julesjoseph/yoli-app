@@ -1,6 +1,8 @@
 /** HTML del ticket térmico (sin dependencias, se puede probar en Node). */
 
 export interface TicketSettings {
+  /** Razón social (del perfil del negocio), opcional. */
+  legalName?: string;
   rnc: string;
   address: string;
   phone: string;
@@ -54,7 +56,7 @@ export function buildReceiptHtml(
 <tr><td class="muted">${i.quantity} x ${money(i.unit_price)}</td><td class="r">${money(i.unit_price * i.quantity)}</td></tr>`,
     )
     .join('');
-  const header = [s.rnc && `RNC: ${esc(s.rnc)}`, s.address && esc(s.address), s.phone && `Tel: ${esc(s.phone)}`]
+  const header = [s.legalName && esc(s.legalName), s.rnc && `RNC: ${esc(s.rnc)}`, s.address && esc(s.address), s.phone && `Tel: ${esc(s.phone)}`]
     .filter(Boolean)
     .map((x) => `<div>${x}</div>`)
     .join('');

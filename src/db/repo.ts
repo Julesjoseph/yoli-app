@@ -64,6 +64,8 @@ export interface Context {
   role: Role;
   businessId: string;
   businessName: string;
+  /** Logo del negocio (URL), vacío si no tiene. */
+  businessLogo: string;
   locationId: string;
   locationName: string;
 }
@@ -79,6 +81,7 @@ export async function getContext(db: SQLiteDatabase): Promise<Context | null> {
     role: m.role as Role,
     businessId: m.business_id,
     businessName: m.business_name ?? '',
+    businessLogo: m.business_logo ?? '',
     locationId: m.location_id,
     locationName: m.location_name ?? '',
   };

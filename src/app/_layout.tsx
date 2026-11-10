@@ -8,17 +8,19 @@ import { Text } from '@/components/text';
 
 import { ThemePreferenceProvider, useColorScheme } from '@/hooks/use-color-scheme';
 
-import { AuthProvider } from '@/auth/auth';
+import { AuthProvider, useAuth } from '@/auth/auth';
 import { migrate } from '@/db/database';
 import { BusinessProvider, useBusinessState } from '@/hooks/use-business';
 import { CartProvider } from '@/hooks/use-cart';
 import { ChooseLocationScreen } from '@/screens/choose-location';
 import { CreateBusinessScreen } from '@/screens/create-business';
-import { LoginScreen } from '@/screens/login';
+import { LoginScreen, NewPasswordScreen } from '@/screens/login';
 import { BlockedScreen, ErrorScreen, LoadingScreen } from '@/screens/status';
 
 function Gate() {
   const { phase } = useBusinessState();
+  const { recovering } = useAuth();
+  if (recovering) return <NewPasswordScreen />;
   switch (phase.kind) {
     case 'loading':
       return <LoadingScreen message={phase.message} />;

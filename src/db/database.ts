@@ -159,6 +159,7 @@ export async function ensureDemoData(db: SQLiteDatabase) {
     role: 'dueno' as const,
     businessId,
     businessName: 'Mi negocio (demo)',
+    businessLogo: '',
     locationId,
     locationName: 'Local principal',
   };
