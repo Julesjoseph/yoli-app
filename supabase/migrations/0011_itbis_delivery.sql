@@ -5,6 +5,14 @@
 
 alter table products add column if not exists delivery_itbis_exempt boolean not null default false;
 
+-- El receptor de PedidosYa solo se actualiza si ya corriste 0007 (si no, se salta).
+do $outer$
+begin
+  if to_regclass('public.delivery_links') is null then
+    raise notice 'PedidosYa automático (0007) no está instalado: solo se agregó la opción de ITBIS.';
+    return;
+  end if;
+  execute $fn$
 create or replace function ingest_pedidosya_order(p jsonb) returns text
 language plpgsql security definer set search_path = public as $$
 declare
@@ -116,12 +124,10 @@ begin
   insert into delivery_events (platform_id, external_id, status, result, payload)
   values ('pedidosya', v_ext, v_status, v_result, p);
   return v_result;
-end $$;
-
-revoke all on function ingest_pedidosya_order(jsonb) from public;
-do $$
-begin
+end $$
+$fn$;
+  revoke all on function ingest_pedidosya_order(jsonb) from public;
   if exists (select 1 from pg_roles where rolname = 'anon') then
     revoke all on function ingest_pedidosya_order(jsonb) from anon, authenticated;
   end if;
-end $$;
+end $outer$;
