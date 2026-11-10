@@ -13,6 +13,7 @@ import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { CHANNEL_LABELS, formatRD, type Channel } from '@/lib/calc';
 import type { DashPeriod } from '@/lib/dashboard';
+import { unitName } from '@/lib/units';
 
 const PERIODS = [
   { value: 'hoy' as DashPeriod, label: 'Hoy' },
@@ -166,7 +167,7 @@ export default function AdminDashboard() {
               <Icon name="alert-circle" size={16} color={t.danger} />
               <Label size={14} numberOfLines={1}>{s.name}</Label>
             </View>
-            <Label size={13} color={t.danger}>{Math.round(s.quantity * 100) / 100} / {s.min_stock} {s.unit}</Label>
+            <Label size={13} color={t.danger}>{Math.round(s.quantity * 100) / 100} / {s.min_stock} {unitName(s.unit, s.min_stock)}</Label>
           </Row>
         ))}
       </Card>

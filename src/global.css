@@ -15,3 +15,9 @@ input:-webkit-autofill:focus {
   -webkit-text-fill-color: inherit;
   transition: background-color 600000s 0s, color 600000s 0s;
 }
+
+/* El borde del campo ya cambia de color al escribir: sin el contorno negro del navegador. */
+input:focus,
+textarea:focus {
+  outline: none;
+}

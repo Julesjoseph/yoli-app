@@ -9,6 +9,7 @@ import { listStock } from '@/db/repo';
 import { useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD } from '@/lib/calc';
+import { unitName } from '@/lib/units';
 
 type Reason = 'compra' | 'merma' | 'ajuste';
 
@@ -53,7 +54,7 @@ export default function InventoryScreen() {
               <IconBadge name={foodIcon(editing.name)} color={t.primary} />
               <View>
                 <Label bold size={17}>{editing.name}</Label>
-                <Label muted size={13}>Hay {fmtQty(editing.quantity)} {editing.unit}</Label>
+                <Label muted size={13}>Hay {fmtQty(editing.quantity)} {unitName(editing.unit, editing.quantity)}</Label>
               </View>
             </View>
             <Pressable onPress={() => setEditing(null)} accessibilityLabel="Cerrar" hitSlop={8}>
@@ -69,7 +70,7 @@ export default function InventoryScreen() {
             value={reason}
             onChange={setReason}
           />
-          <Field label={`Cantidad (${editing.unit})`} icon="scale-balance" keyboardType="decimal-pad" value={qty} onChangeText={setQty} autoFocus />
+          <Field label={`Cantidad (${unitName(editing.unit)})`} icon="scale-balance" keyboardType="decimal-pad" value={qty} onChangeText={setQty} autoFocus />
           <Button icon="content-save" title="Guardar movimiento" onPress={save} />
         </Card>
       ) : null}
@@ -102,12 +103,12 @@ export default function InventoryScreen() {
                   <IconBadge name={foodIcon(s.name)} color={color} />
                   <View style={{ flex: 1 }}>
                     <Label bold size={16} numberOfLines={1}>{s.name}</Label>
-                    <Label muted size={13}>Mínimo {fmtQty(s.min_stock)} {s.unit}</Label>
+                    <Label muted size={13}>Mínimo {fmtQty(s.min_stock)} {unitName(s.unit, s.min_stock)}</Label>
                   </View>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
                   <Label bold size={17} color={isLow ? t.danger : t.text}>
-                    {fmtQty(s.quantity)} <Label muted size={13}>{s.unit}</Label>
+                    {fmtQty(s.quantity)} <Label muted size={13}>{unitName(s.unit, s.quantity)}</Label>
                   </Label>
                   {isLow ? <Pill text="REPONER" color={t.danger} /> : null}
                 </View>

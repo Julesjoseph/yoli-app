@@ -9,12 +9,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { foodIcon } from '@/components/brand-icons';
 import { ProductImage } from '@/components/product-image';
 import { EmptyState, Icon, IconBadge, Label, useElevation } from '@/components/ui';
-import { getRecipe, listCatalogIngredients } from '@/db/catalog';
+import { getComboLines, getRecipe, listCatalogIngredients } from '@/db/catalog';
 import { listCategories, listProducts } from '@/db/repo';
 import { useFocusData } from '@/hooks/use-business';
 import { useCart } from '@/hooks/use-cart';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD } from '@/lib/calc';
+import { withChoices, type ComboChoice } from '@/lib/combo';
 
 const goBack = () => (router.canGoBack() ? router.back() : router.replace('/caja'));
 
@@ -25,16 +26,29 @@ export default function ProductDetailScreen() {
   const t = useTheme();
   const elevation = useElevation(2);
   const [qty, setQty] = useState(1);
+  /** Opción elegida en cada grupo del combo (grupo → producto). */
+  const [picked, setPicked] = useState<Record<string, string>>({});
 
   const [data] = useFocusData(async () => {
-    const [products, categories, recipe, ingredients] = await Promise.all([
+    const [products, categories, recipe, ingredients, combo, names] = await Promise.all([
       listProducts(db),
       listCategories(db),
       getRecipe(db, id),
       listCatalogIngredients(db),
+      getComboLines(db, id),
+      db.getAllAsync<{ id: string; name: string; image_url: string | null }>('SELECT id, name, image_url FROM products'),
     ]);
     const product = products.find((p) => p.id === id) ?? null;
+    const info = (pid: string) => names.find((n) => n.id === pid);
+    const groups: { name: string; options: ComboChoice[] }[] = [];
+    for (const c of combo.filter((x) => x.group_name)) {
+      let g = groups.find((x) => x.name === c.group_name);
+      if (!g) groups.push((g = { name: c.group_name, options: [] }));
+      g.options.push({ group: c.group_name, productId: c.item_product_id, name: info(c.item_product_id)?.name ?? 'Opción', extra: c.extra_price });
+    }
     return {
+      includes: combo.filter((c) => !c.group_name).map((c) => info(c.item_product_id)?.name ?? 'Producto'),
+      groups,
       product,
       category: categories.find((c) => c.id === product?.category_id)?.name ?? null,
       ingredients: recipe
@@ -45,6 +59,9 @@ export default function ProductDetailScreen() {
 
   const product = data?.product;
   const inCart = product ? cart.qtyOf(product.id) : 0;
+  // Si no ha tocado nada, se toma la primera opción de cada grupo.
+  const chosen: ComboChoice[] = (data?.groups ?? []).map((g) => g.options.find((o) => o.productId === picked[g.name]) ?? g.options[0]!);
+  const toAdd = product ? withChoices(product, chosen) : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: t.background }}>
@@ -89,10 +106,43 @@ export default function ProductDetailScreen() {
                 </View>
               ) : null}
               <Text style={[styles.name, { color: t.text }]}>{product.name}</Text>
-              <Text style={[styles.price, { color: t.primary }]}>{formatRD(cart.priceOf(product))}</Text>
+              <Text style={[styles.price, { color: t.primary }]}>{formatRD(cart.priceOf(toAdd ?? product))}</Text>
               <Label muted size={13}>Precio con ITBIS incluido</Label>
               {inCart ? <Label size={13} color={t.success}>Ya tienes {inCart} en la orden</Label> : null}
             </View>
+
+            {data && data.includes.length ? (
+              <View style={{ gap: 8 }}>
+                <Label bold size={17}>Trae</Label>
+                <Label size={15}>{data.includes.join(' + ')}</Label>
+              </View>
+            ) : null}
+
+            {(data?.groups ?? []).map((g) => (
+              <View key={g.name} style={{ gap: 10 }}>
+                <Label bold size={17}>Elige {g.name.toLowerCase()}</Label>
+                <View style={{ gap: 8 }}>
+                  {g.options.map((o) => {
+                    const selected = (picked[g.name] ?? g.options[0]?.productId) === o.productId;
+                    return (
+                      <Pressable
+                        key={o.productId}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                        onPress={() => setPicked((cur) => ({ ...cur, [g.name]: o.productId }))}
+                        style={[
+                          styles.option,
+                          { borderColor: selected ? t.primary : t.border, backgroundColor: selected ? t.primarySoft : t.backgroundElement },
+                        ]}>
+                        <Icon name={selected ? 'radiobox-marked' : 'radiobox-blank'} color={selected ? t.primary : t.textSecondary} />
+                        <Label bold={selected} size={16} style={{ flex: 1 }}>{o.name}</Label>
+                        {o.extra ? <Label size={15} color={t.primary}>+{formatRD(o.extra)}</Label> : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
 
             {data && data.ingredients.length ? (
               <View style={{ gap: 10 }}>
@@ -135,12 +185,12 @@ export default function ProductDetailScreen() {
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-              cart.add(product, qty);
+              cart.add(toAdd ?? product, qty);
               goBack();
             }}
             style={({ pressed }) => [styles.cta, { backgroundColor: t.primary, opacity: pressed ? 0.85 : 1 }]}>
             <Icon name="cart-plus" color="#FFFFFF" size={20} />
-            <Text style={styles.ctaText} numberOfLines={1}>Agregar · {formatRD(cart.priceOf(product) * qty)}</Text>
+            <Text style={styles.ctaText} numberOfLines={1}>Agregar · {formatRD(cart.priceOf(toAdd ?? product) * qty)}</Text>
           </Pressable>
         </SafeAreaView>
       ) : null}
@@ -170,6 +220,7 @@ const styles = StyleSheet.create({
   catPill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   name: { fontSize: 26, fontWeight: '900', textAlign: 'center', letterSpacing: -0.5 },
   price: { fontSize: 28, fontWeight: '900' },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12 },
   ingredient: { width: 92, alignItems: 'center', gap: 6, padding: 10, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth },
   bar: {
     position: 'absolute',

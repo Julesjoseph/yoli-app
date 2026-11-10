@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { foodIcon } from '@/components/brand-icons';
+import { IngredientForm } from '@/components/ingredient-form';
 import { ProductImage } from '@/components/product-image';
 import { Button, Card, Chips, EmptyState, Field, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle } from '@/components/ui';
 import {
@@ -13,15 +14,14 @@ import {
   loadSampleCatalog,
   recipeCost,
   saveCategory,
-  saveIngredient,
   type CatalogIngredient,
 } from '@/db/catalog';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD } from '@/lib/calc';
+import { unitName } from '@/lib/units';
 
 type Tab = 'productos' | 'insumos' | 'categorias';
-const UNITS = ['unidad', 'g', 'kg', 'lb', 'ml', 'litro', 'lonja', 'onza'];
 
 const num = (s: string) => Number(s.replace(',', '.'));
 
@@ -156,73 +156,38 @@ export default function CatalogScreen() {
 }
 
 function Ingredients({ ingredients, onSaved }: { ingredients: CatalogIngredient[]; onSaved: () => void }) {
-  const db = useSQLiteContext();
-  const ctx = useBusiness();
   const t = useTheme();
   const [editing, setEditing] = useState<Partial<CatalogIngredient> | null>(null);
-  const [name, setName] = useState('');
-  const [unit, setUnit] = useState('unidad');
-  const [cost, setCost] = useState('');
-  const [min, setMin] = useState('');
-  const [msg, setMsg] = useState('');
-
-  function open(i: Partial<CatalogIngredient>) {
-    setEditing(i);
-    setName(i.name ?? '');
-    setUnit(i.unit ?? 'unidad');
-    setCost(i.cost_per_unit !== undefined ? String(i.cost_per_unit) : '');
-    setMin(i.min_stock !== undefined ? String(i.min_stock) : '');
-    setMsg('');
-  }
-
-  async function save() {
-    try {
-      await saveIngredient(db, ctx, { id: editing?.id, name, unit, cost_per_unit: num(cost || '0'), min_stock: num(min || '0') });
-      setEditing(null);
-      onSaved();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
-    }
-  }
 
   return (
     <>
       {editing ? (
-        <Card style={{ borderColor: t.primary, borderWidth: 1.5, gap: 12 }}>
-          <Row>
-            <Label bold size={17}>{editing.id ? 'Editar insumo' : 'Nuevo insumo'}</Label>
-            <Pressable onPress={() => setEditing(null)} accessibilityLabel="Cerrar" hitSlop={8}>
-              <Icon name="close" color={t.textSecondary} />
-            </Pressable>
-          </Row>
-          <Field label="Nombre" icon="basket-outline" value={name} onChangeText={setName} placeholder="Ej. Plátano verde" />
-          <Label muted size={13}>Unidad de medida</Label>
-          <Chips options={UNITS.map((u) => ({ value: u, label: u }))} value={unit} onChange={setUnit} />
-          <Field label={`Costo por ${unit} (RD$)`} icon="cash" keyboardType="decimal-pad" value={cost} onChangeText={setCost} placeholder="0.00" />
-          <Field label={`Stock mínimo (${unit})`} icon="alert-circle-outline" keyboardType="decimal-pad" value={min} onChangeText={setMin} placeholder="0" />
-          {msg ? <Label color={t.danger} size={14}>{msg}</Label> : null}
-          <Button icon="content-save" title="Guardar insumo" onPress={save} />
-          {!editing.id ? (
-            <Label muted size={13}>Para agregar existencias, usa la pestaña Inventario después de guardarlo.</Label>
-          ) : null}
-        </Card>
+        <IngredientForm
+          key={editing.id ?? 'nuevo'}
+          initial={editing}
+          onCancel={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            onSaved();
+          }}
+        />
       ) : (
-        <Button icon="plus" title="Nuevo insumo" onPress={() => open({})} />
+        <Button icon="plus" title="Nuevo insumo" onPress={() => setEditing({})} />
       )}
       <Card style={{ gap: 0, paddingVertical: 6 }}>
-        {ingredients.length === 0 ? <EmptyState icon="basket-outline" text="Todavía no hay insumos." /> : null}
+        {ingredients.length === 0 ? <EmptyState icon="basket-outline" text="Todavía no hay insumos. Ej.: piezas de pollo, pan, queso, arroz." /> : null}
         {ingredients.map((i, idx) => (
           <Pressable
             key={i.id}
             accessibilityRole="button"
-            onPress={() => open(i)}
+            onPress={() => setEditing(i)}
             style={[styles.item, idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}>
             <IconBadge name={foodIcon(i.name)} color={t.success} size={38} />
             <View style={{ flex: 1 }}>
               <Label bold size={15}>{i.name}</Label>
-              <Label muted size={13}>Mínimo {i.min_stock} {i.unit}</Label>
+              <Label muted size={13}>Se cuenta en {unitName(i.unit)} · aviso con menos de {i.min_stock}</Label>
             </View>
-            <Label size={14}>{formatRD(i.cost_per_unit)} / {i.unit}</Label>
+            <Label size={14}>{formatRD(i.cost_per_unit)} c/{unitName(i.unit, 1)}</Label>
             <Icon name="pencil-outline" size={18} color={t.textSecondary} />
           </Pressable>
         ))}

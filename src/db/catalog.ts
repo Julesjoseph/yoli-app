@@ -35,6 +35,12 @@ export interface CatalogIngredient {
   cost_per_unit: number;
   min_stock: number;
 }
+/** Parte de un combo: incluida siempre (group = '') o una opción para elegir dentro de un grupo. */
+export interface ComboLine {
+  item_product_id: string;
+  group_name: string;
+  extra_price: number;
+}
 export interface RecipeLine {
   ingredient_id: string;
   quantity: number;
@@ -50,6 +56,12 @@ export const listCatalogIngredients = (db: SQLiteDatabase) =>
   db.getAllAsync<CatalogIngredient>('SELECT id, name, unit, cost_per_unit, min_stock FROM ingredients ORDER BY name');
 export const getRecipe = (db: SQLiteDatabase, productId: string) =>
   db.getAllAsync<RecipeLine>('SELECT ingredient_id, quantity FROM recipe_items WHERE product_id = ?', [productId]);
+
+export const getComboLines = (db: SQLiteDatabase, productId: string) =>
+  db.getAllAsync<ComboLine>(
+    'SELECT item_product_id, group_name, extra_price FROM combo_items WHERE product_id = ? ORDER BY sort_order',
+    [productId],
+  );
 
 export async function getProduct(db: SQLiteDatabase, id: string) {
   return db.getFirstAsync<CatalogProduct>(
@@ -146,6 +158,8 @@ export async function saveProduct(
     price_ubereats?: number | null;
   },
   recipe: RecipeLine[],
+  /** undefined = no tocar el combo (así funciona aunque la nube no tenga la tabla). */
+  combo?: ComboLine[],
 ) {
   const before = input.id
     ? await db.getFirstAsync<{ price_pedidosya: number | null; price_ubereats: number | null }>(
@@ -187,7 +201,43 @@ export async function saveProduct(
     );
   }
 
+  const comboRows = (combo ?? [])
+    .filter((c) => c.item_product_id && c.item_product_id !== row.id)
+    .map((c, i) => ({
+      id: randomUUID(),
+      business_id: ctx.businessId,
+      product_id: row.id,
+      item_product_id: c.item_product_id,
+      group_name: c.group_name.trim(),
+      extra_price: Number.isFinite(c.extra_price) && c.extra_price > 0 ? c.extra_price : 0,
+      sort_order: i,
+    }));
+  let comboError: Error | null = null;
+  if (combo !== undefined) {
+    const hadCombo = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM combo_items WHERE product_id = ?', [row.id]);
+    if (comboRows.length || hadCombo?.n) {
+      try {
+        await cloud(ctx, () => supabase!.from('combo_items').delete().eq('product_id', row.id));
+        if (comboRows.length) await cloud(ctx, () => supabase!.from('combo_items').insert(comboRows));
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        comboError = /combo_items|schema cache|does not exist/i.test(m)
+          ? new Error('El producto se guardó, pero para los combos falta un paso en Supabase: corre el archivo 0010_combos.sql.')
+          : new Error(`El producto se guardó, pero el combo no: ${m}`);
+      }
+    }
+  }
+
   await db.withTransactionAsync(async () => {
+    if (combo !== undefined && !comboError) {
+      await db.runAsync('DELETE FROM combo_items WHERE product_id = ?', [row.id]);
+      for (const c of comboRows) {
+        await db.runAsync(
+          'INSERT INTO combo_items (id, business_id, product_id, item_product_id, group_name, extra_price, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [c.id, c.business_id, c.product_id, c.item_product_id, c.group_name, c.extra_price, c.sort_order],
+        );
+      }
+    }
     const previous = await db.getFirstAsync<{ image_url: string | null }>('SELECT image_url FROM products WHERE id = ?', [row.id]);
     const image = input.image_url !== undefined ? input.image_url : (previous?.image_url ?? null);
     await db.runAsync(
@@ -202,6 +252,7 @@ export async function saveProduct(
       ]);
     }
   });
+  if (comboError) throw comboError;
   return row.id;
 }
 
@@ -243,6 +294,8 @@ export const SAMPLE_CATALOG = {
     cafe: { name: 'Café molido', unit: 'g', cost: 1.2, min: 500, initial: 1500 },
     leche: { name: 'Leche', unit: 'ml', cost: 0.07, min: 2000, initial: 6000 },
     refresco: { name: 'Refresco lata', unit: 'unidad', cost: 35, min: 24, initial: 48 },
+    piezas: { name: 'Pollo frito (piezas)', unit: 'pieza', cost: 38, min: 16, initial: 48 },
+    platano: { name: 'Plátano verde', unit: 'unidad', cost: 15, min: 10, initial: 30 },
   },
   products: [
     { name: 'Hamburguesa clásica', price: 295, cat: 0, recipe: [['pan', 1], ['carne', 150], ['queso', 1]] },
@@ -253,7 +306,25 @@ export const SAMPLE_CATALOG = {
     { name: 'Café', price: 75, cat: 2, recipe: [['cafe', 12]] },
     { name: 'Café con leche', price: 110, cat: 2, recipe: [['cafe', 12], ['leche', 150]] },
     { name: 'Refresco', price: 80, cat: 3, recipe: [['refresco', 1]] },
-  ] as { name: string; price: number; cat: number; recipe: [string, number][] }[],
+    { name: 'Tostones', price: 125, cat: 0, recipe: [['platano', 1]] },
+    { name: 'Pica pollo (2 piezas)', price: 225, cat: 0, recipe: [['piezas', 2]] },
+    {
+      name: 'Combo pica pollo',
+      price: 375,
+      cat: 0,
+      recipe: [['piezas', 2]],
+      groups: [
+        { name: 'Acompañante', options: [['Papas fritas', 0], ['Tostones', 0]] },
+        { name: 'Bebida', options: [['Refresco', 0], ['Café', 0]] },
+      ],
+    },
+  ] as {
+    name: string;
+    price: number;
+    cat: number;
+    recipe: [string, number][];
+    groups?: { name: string; options: [string, number][] }[];
+  }[],
 };
 
 /** Carga el menú de ejemplo (y un inventario inicial en el local actual). */
@@ -267,12 +338,14 @@ export async function loadSampleCatalog(db: SQLiteDatabase, ctx: Context) {
     ingIds[key] = await saveIngredient(db, ctx, { name: i.name, unit: i.unit, cost_per_unit: i.cost, min_stock: i.min });
     await addStock(db, ctx, ingIds[key], i.initial, 'ajuste');
   }
+  const prodIds: Record<string, string> = {};
   for (const p of SAMPLE_CATALOG.products) {
-    await saveProduct(
+    prodIds[p.name] = await saveProduct(
       db,
       ctx,
       { name: p.name, price: p.price, category_id: catIds[p.cat], itbis_rate: 0.18, active: true },
       p.recipe.map(([key, quantity]) => ({ ingredient_id: ingIds[key], quantity })),
+      p.groups?.flatMap((g) => g.options.map(([name, extra]) => ({ item_product_id: prodIds[name]!, group_name: g.name, extra_price: extra }))),
     );
   }
 }

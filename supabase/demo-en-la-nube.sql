@@ -82,7 +82,9 @@ begin
     ('habichuelas', 'Habichuelas', 'g', 0.1, 2000),
     ('cafe', 'Café molido', 'g', 1.2, 500),
     ('leche', 'Leche', 'ml', 0.07, 2000),
-    ('refresco', 'Refresco lata', 'unidad', 35, 24)
+    ('refresco', 'Refresco lata', 'unidad', 35, 24),
+    ('piezas', 'Pollo frito (piezas)', 'pieza', 38, 16),
+    ('platano', 'Plátano verde', 'unidad', 15, 10)
   ) as t(k, name, unit, cost, min) loop
     insert into ingredients (business_id, name, unit, cost_per_unit, min_stock)
       values (v_biz, r.name, r.unit, r.cost, r.min) returning id into v_order;
@@ -97,7 +99,10 @@ begin
     ('Pollo guisado con arroz', 250, 2, '[["arroz",200],["pollo",200]]', 2),
     ('Café', 75, 3, '[["cafe",12]]', 1),
     ('Café con leche', 110, 3, '[["cafe",12],["leche",150]]', 3),
-    ('Refresco', 80, 4, '[["refresco",1]]', 2)
+    ('Refresco', 80, 4, '[["refresco",1]]', 2),
+    ('Tostones', 125, 1, '[["platano",1]]', 1),
+    ('Pica pollo (2 piezas)', 225, 1, '[["piezas",2]]', 2),
+    ('Combo pica pollo', 375, 1, '[["piezas",2]]', 3)
   ) as t(name, price, cat, recipe, weight) loop
     insert into products (business_id, category_id, name, price, itbis_rate)
       values (v_biz, v_cat[r.cat], r.name, r.price, 0.18) returning id into v_order;
@@ -111,6 +116,18 @@ begin
       v_pick := v_pick || array_length(v_prod, 1);
     end loop;
   end loop;
+
+  -- Combo pica pollo: elige acompañante y bebida (si ya existe la tabla de combos, migración 0010).
+  if to_regclass('public.combo_items') is not null then
+    execute $q$
+      insert into combo_items (business_id, product_id, item_product_id, group_name, extra_price, sort_order)
+      select $1, c.id, o.id, g.grp, g.extra, g.ord
+        from (values ('Acompañante', 'Papas fritas', 0, 1), ('Acompañante', 'Tostones', 0, 2),
+                     ('Bebida', 'Refresco', 0, 3), ('Bebida', 'Café', 0, 4)) as g(grp, item, extra, ord)
+        join products c on c.business_id = $1 and c.name = 'Combo pica pollo'
+        join products o on o.business_id = $1 and o.name = g.item
+    $q$ using v_biz;
+  end if;
 
   -- Inventario inicial
   insert into inventory_movements (id, business_id, location_id, ingredient_id, quantity, reason, created_at)

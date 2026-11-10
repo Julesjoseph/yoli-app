@@ -41,8 +41,11 @@ export async function pullCatalog(db: SQLiteDatabase, businessId: string) {
   ]);
   const productIds = products.map((p) => p.id as string);
   const recipes = productIds.length ? await fetchAll('recipe_items', (q) => q.in('product_id', productIds)) : [];
+  // Combos (migración 0010). Si la nube aún no la tiene, se sigue sin combos.
+  const combos = await fetchAll('combo_items', byBusiness).catch(() => null);
 
   await db.withTransactionAsync(async () => {
+    if (combos) await db.runAsync('DELETE FROM combo_items');
     for (const t of ['recipe_items', 'products', 'categories', 'ingredients', 'platform_commissions', 'locations']) {
       await db.runAsync(`DELETE FROM ${t}`);
     }
@@ -51,6 +54,9 @@ export async function pullCatalog(db: SQLiteDatabase, businessId: string) {
     await insertRows(db, 'products', products, ['id', 'business_id', 'category_id', 'name', 'price', 'itbis_rate', 'active', 'image_url', 'price_pedidosya', 'price_ubereats']);
     await insertRows(db, 'ingredients', ingredients, ['id', 'business_id', 'name', 'unit', 'cost_per_unit', 'min_stock']);
     await insertRows(db, 'recipe_items', recipes, ['product_id', 'ingredient_id', 'quantity']);
+    if (combos) {
+      await insertRows(db, 'combo_items', combos, ['id', 'business_id', 'product_id', 'item_product_id', 'group_name', 'extra_price', 'sort_order']);
+    }
     await insertRows(db, 'platform_commissions', commissions, ['business_id', 'platform_id', 'commission_rate']);
   });
   return { locations: locations.length, products: products.length };

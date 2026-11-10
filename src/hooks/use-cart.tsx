@@ -70,7 +70,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     discount,
     totals,
     priceOf: (p) => priceFor(p, channel),
-    qtyOf: (id) => items[id]?.quantity ?? 0,
+    // Un combo con acompañantes distintos va en líneas separadas; aquí se suman por producto.
+    qtyOf: (id) => lines.reduce((n, l) => n + ((l.product.base_id ?? l.product.id) === id ? l.quantity : 0), 0),
     add: (p, qty = 1) =>
       setItems((c) => ({ ...c, [p.id]: { product: p, quantity: (c[p.id]?.quantity ?? 0) + qty } })),
     remove: (id) =>

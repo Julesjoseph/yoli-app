@@ -111,7 +111,7 @@ export default function MenuScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Agregar ${p.name} a la orden`}
-                    onPress={() => cart.add(p)}
+                    onPress={() => (p.choices ? router.push({ pathname: '/producto/[id]', params: { id: p.id } }) : cart.add(p))}
                     hitSlop={6}
                     style={({ pressed }) => [styles.addBtn, { backgroundColor: t.primary, opacity: pressed ? 0.8 : 1 }]}>
                     <Icon name="cart-plus" size={20} color="#FFFFFF" />

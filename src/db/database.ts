@@ -9,7 +9,7 @@ import { loadDemoActivity } from './demo';
  * Las columnas tienen los mismos nombres que en Supabase para que la
  * sincronización envíe las filas tal cual.
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export async function migrate(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -31,6 +31,15 @@ export async function migrate(db: SQLiteDatabase) {
       await db.execAsync(`
         ALTER TABLE orders ADD COLUMN cash_received REAL;
         ALTER TABLE orders ADD COLUMN change_given REAL;
+      `);
+    }
+    // v5: combos con acompañantes
+    if (current < 5) {
+      await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS combo_items (
+      id TEXT PRIMARY KEY, business_id TEXT NOT NULL, product_id TEXT NOT NULL, item_product_id TEXT NOT NULL,
+      group_name TEXT NOT NULL DEFAULT '', extra_price REAL NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0
+    );
       `);
     }
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
@@ -62,6 +71,10 @@ export async function migrate(db: SQLiteDatabase) {
     CREATE TABLE IF NOT EXISTS recipe_items (
       product_id TEXT NOT NULL, ingredient_id TEXT NOT NULL, quantity REAL NOT NULL,
       PRIMARY KEY (product_id, ingredient_id)
+    );
+    CREATE TABLE IF NOT EXISTS combo_items (
+      id TEXT PRIMARY KEY, business_id TEXT NOT NULL, product_id TEXT NOT NULL, item_product_id TEXT NOT NULL,
+      group_name TEXT NOT NULL DEFAULT '', extra_price REAL NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS platform_commissions (
       business_id TEXT NOT NULL, platform_id TEXT NOT NULL, commission_rate REAL NOT NULL,
@@ -100,7 +113,7 @@ export async function migrate(db: SQLiteDatabase) {
 }
 
 const DATA_TABLES = [
-  'order_items', 'orders', 'inventory_movements', 'expenses', 'recipe_items', 'products',
+  'order_items', 'orders', 'inventory_movements', 'expenses', 'combo_items', 'recipe_items', 'products',
   'categories', 'ingredients', 'platform_commissions', 'locations', 'outbox', 'app_settings',
 ];
 
@@ -127,7 +140,7 @@ export async function setSettings(db: SQLiteDatabase, values: Record<string, str
 }
 
 /** Datos de ejemplo para probar la app sin conexión a la nube (modo demo). */
-const DEMO_DATA_VERSION = '2';
+const DEMO_DATA_VERSION = '3';
 
 export async function ensureDemoData(db: SQLiteDatabase) {
   // Se vuelve a crear si el demo es de una versión anterior (sin ventas de prueba).

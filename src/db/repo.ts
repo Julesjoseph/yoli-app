@@ -23,6 +23,11 @@ export interface Product {
   image_url: string | null;
   price_pedidosya: number | null;
   price_ubereats: number | null;
+  /** Cuántas opciones para elegir tiene (si es combo con acompañantes). */
+  choices?: number;
+  /** En un combo ya armado: el producto real y los productos que eligió el cliente. */
+  base_id?: string;
+  chosen?: string[];
 }
 export interface Category {
   id: string;
@@ -106,7 +111,9 @@ export const listCategories = (db: SQLiteDatabase) =>
 
 export const listProducts = (db: SQLiteDatabase) =>
   db.getAllAsync<Product>(
-    'SELECT id, category_id, name, price, itbis_rate, image_url, price_pedidosya, price_ubereats FROM products WHERE active = 1 ORDER BY name',
+    `SELECT id, category_id, name, price, itbis_rate, image_url, price_pedidosya, price_ubereats,
+       (SELECT COUNT(*) FROM combo_items c WHERE c.product_id = products.id AND c.group_name <> '') AS choices
+     FROM products WHERE active = 1 ORDER BY name`,
   );
 
 export async function getCommissionRates(db: SQLiteDatabase, businessId: string) {
@@ -142,14 +149,29 @@ export async function recordSale(
     input.channel,
     { commissionRate: rates[input.channel] ?? 0, applyTipLaw: input.applyTipLaw, discount: input.discount },
   );
-  const productIds = input.lines.map((l) => l.product.id);
+  // Lo que se descuenta del inventario: el producto, lo que trae siempre (combo) y lo que eligió el cliente.
+  const baseIds = [...new Set(input.lines.map((l) => l.product.base_id ?? l.product.id))];
+  const fixed = await db.getAllAsync<{ product_id: string; item_product_id: string }>(
+    `SELECT product_id, item_product_id FROM combo_items
+     WHERE group_name = '' AND product_id IN (${baseIds.map(() => '?').join(',')})`,
+    baseIds,
+  );
+  const sold = input.lines.flatMap((l) => {
+    const base = l.product.base_id ?? l.product.id;
+    return [
+      { productId: base, quantity: l.quantity },
+      ...fixed.filter((f) => f.product_id === base).map((f) => ({ productId: f.item_product_id, quantity: l.quantity })),
+      ...(l.product.chosen ?? []).map((id) => ({ productId: id, quantity: l.quantity })),
+    ];
+  });
+  const productIds = [...new Set(sold.map((s) => s.productId))];
   const recipes = await db.getAllAsync<{ product_id: string; ingredient_id: string; quantity: number }>(
     `SELECT product_id, ingredient_id, quantity FROM recipe_items
      WHERE product_id IN (${productIds.map(() => '?').join(',')})`,
     productIds,
   );
   const usage = ingredientUsage(
-    input.lines.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
+    sold,
     recipes.map<RecipeItem>((r) => ({ productId: r.product_id, ingredientId: r.ingredient_id, quantity: r.quantity })),
   );
 
@@ -199,7 +221,7 @@ export async function recordSale(
       const item = {
         id: randomUUID(),
         order_id: order.id,
-        product_id: l.product.id,
+        product_id: l.product.base_id ?? l.product.id,
         name: l.product.name,
         unit_price: priceFor(l.product, input.channel),
         quantity: l.quantity,
