@@ -104,6 +104,12 @@ function PasswordField(props: { label: string; value: string; onChangeText: (v: 
   );
 }
 
+/** En la PC el navegador puede autocompletar el correo y la contraseña sin avisar a la app. */
+function domValue(selector: string) {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return '';
+  return (document.querySelector(selector) as HTMLInputElement | null)?.value ?? '';
+}
+
 export function LoginScreen() {
   const auth = useAuth();
   const db = useSQLiteContext();
@@ -132,10 +138,15 @@ export function LoginScreen() {
   }
 
   async function submit() {
-    if (busy || !email || !password || (!entrar && !name)) return;
+    if (busy) return;
+    // El navegador puede autocompletar sin avisar: se revisa aquí y no se apaga el botón.
+    const e = email || domValue('input[autocomplete="email"]');
+    const pw = password || domValue('input[type="password"]');
+    if (!entrar && !name.trim()) return setMsg({ text: 'Escribe tu nombre.' });
+    if (!e.trim() || !pw) return setMsg({ text: 'Escribe tu correo y tu contraseña.' });
     setBusy(true);
     setMsg(null);
-    const error = entrar ? await auth.signIn(email, password) : await auth.signUp(name, email, password);
+    const error = entrar ? await auth.signIn(e, pw) : await auth.signUp(name, e, pw);
     setBusy(false);
     if (error) setMsg({ text: error });
   }
@@ -196,11 +207,6 @@ export function LoginScreen() {
         autoComplete={entrar ? 'current-password' : 'new-password'}
         onSubmitEditing={submit}
       />
-      {entrar ? (
-        <Pressable accessibilityRole="link" onPress={forgot} disabled={busy} style={{ alignSelf: 'flex-end', paddingVertical: 2 }}>
-          <Text style={{ color: t.primary, fontWeight: '700', fontSize: 14 }}>¿Olvidaste tu contraseña?</Text>
-        </Pressable>
-      ) : null}
 
       {msg ? <Message text={msg.text} ok={msg.ok} /> : null}
 
@@ -208,8 +214,13 @@ export function LoginScreen() {
         size="lg"
         title={busy ? 'Un momento…' : entrar ? 'Entrar' : 'Crear cuenta'}
         onPress={submit}
-        disabled={busy || !email || !password || (!entrar && !name)}
+        disabled={busy}
       />
+      {entrar ? (
+        <Pressable accessibilityRole="link" onPress={forgot} disabled={busy} style={{ alignSelf: 'center', paddingVertical: 2 }}>
+          <Text style={{ color: t.primary, fontWeight: '700', fontSize: 14 }}>¿Olvidaste tu contraseña?</Text>
+        </Pressable>
+      ) : null}
       <OrDivider />
       <OutlineButton title={entrar ? 'Crear cuenta' : 'Ya tengo cuenta'} onPress={switchMode} disabled={busy} />
 

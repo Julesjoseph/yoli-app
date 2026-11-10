@@ -7,7 +7,7 @@ import { Logo } from '@/components/logo';
 import { Button, Label, Screen } from '@/components/ui';
 import { useBusinessState } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { SUPPORT_EMAIL, SUPPORT_WHATSAPP } from '@/sync/config';
+import { DEMO_EMAIL, SUPPORT_EMAIL, SUPPORT_WHATSAPP } from '@/sync/config';
 
 export function LoadingScreen({ message }: { message?: string }) {
   const t = useTheme();
@@ -38,6 +38,14 @@ export function BlockedScreen({ access, businessName }: { access: 'vencido' | 's
   const auth = useAuth();
   const t = useTheme();
   const msg = encodeURIComponent(`Hola, quiero renovar YOLI para mi negocio "${businessName}".`);
+  if ((auth.session?.user.email ?? '').toLowerCase() === DEMO_EMAIL) {
+    return (
+      <Screen title="Demo no disponible">
+        <Label>El demo de YOLI no está disponible en este momento. Crea tu cuenta para probar YOLI con 14 días gratis.</Label>
+        <Button icon="arrow-left" title="Volver" onPress={auth.signOut} />
+      </Screen>
+    );
+  }
   return (
     <Screen title={access === 'suspendido' ? 'Cuenta suspendida' : 'Tu prueba terminó'}>
       <Label>

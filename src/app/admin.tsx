@@ -5,6 +5,7 @@ import { Button, Card, Chips, EmptyState, IconBadge, Label, Pill, Row, Screen } 
 import { useBusinessState, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD } from '@/lib/calc';
+import { DEMO_EMAIL } from '@/sync/config';
 import { supabase } from '@/sync/supabase';
 
 /** Un negocio cliente de YOLI, como lo devuelve admin_businesses() (migración 0008). */
@@ -77,7 +78,10 @@ export default function AdminScreen() {
     );
   }
 
-  const clients = data?.clients ?? [];
+  const isDemo = (c: Client) => (c.owner_email ?? '').toLowerCase() === DEMO_EMAIL;
+  const all = data?.clients ?? [];
+  const demo = all.find(isDemo);
+  const clients = all.filter((c) => !isDemo(c));
   const count = (a: Client['access'] | 'vencido') =>
     clients.filter((c) => (a === 'vencido' ? c.access === 'vencido' || c.access === 'suspendido' : c.access === a)).length;
   const shown = clients.filter((c) =>
@@ -125,6 +129,36 @@ export default function AdminScreen() {
           </Card>
         ))}
       </View>
+
+      {demo ? (
+        <Card style={{ gap: 10, borderWidth: 1.5, borderColor: demo.access === 'suspendido' ? t.danger : t.info }}>
+          <Row>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Label bold size={17}>Demo público</Label>
+              <Label muted size={13}>
+                Botón “Probar demo” · {demo.orders_30d} ventas de prueba · {demo.owner_email}
+              </Label>
+            </View>
+            <Pill text={demo.access === 'suspendido' ? 'DESACTIVADO' : 'ACTIVO'} color={demo.access === 'suspendido' ? t.danger : t.success} />
+          </Row>
+          <Label size={14}>
+            {demo.access === 'suspendido'
+              ? 'Nadie puede entrar al demo. Al tocar “Probar demo” verán que no está disponible.'
+              : 'Cualquiera puede probar YOLI con el negocio de ejemplo.'}
+          </Label>
+          {demo.access === 'suspendido' ? (
+            <Button size="sm" icon="play" title="Activar demo" onPress={() => setSub(demo, 'activo', null, 'demo activado')} />
+          ) : (
+            <Button
+              size="sm"
+              variant="danger"
+              icon="pause"
+              title="Desactivar demo"
+              onPress={() => confirm('Desactivar demo', 'Nadie podrá entrar al demo hasta que lo actives otra vez.', () => setSub(demo, 'suspendido', null, 'demo desactivado'))}
+            />
+          )}
+        </Card>
+      ) : null}
 
       <Chips
         options={[
