@@ -8,7 +8,7 @@ import { CHANNEL_ICONS } from '@/components/brand-icons';
 import { ChannelColors } from '@/constants/theme';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { ECF_LABELS, emitInvoice, getEinvoiceSettings, listInvoices, type EcfType, type Invoice } from '@/invoicing/ecf';
+import { ECF_LABELS, emitInvoice, getEinvoiceSettings, listInvoices, refreshInvoice, type EcfType, type Invoice } from '@/invoicing/ecf';
 import { CHANNEL_LABELS, formatRD } from '@/lib/calc';
 import { getTicketOrder, printOrderTicket, ticketNumber } from '@/printing/receipt';
 import { pushOutbox } from '@/sync/sync';
@@ -35,6 +35,7 @@ export default function SaleScreen() {
   const order = data?.order;
   const valid = (data?.invoices ?? []).filter((i) => i.status === 'aceptada' || i.status === 'enviada');
   const settings = data?.settings?.settings;
+  const lastRejected = !valid.length ? (data?.invoices ?? []).filter((i) => i.status === 'rechazada').pop() : undefined;
   const chosen: EcfType = type ?? settings?.default_type ?? '32';
   const shop = { businessName: ctx.businessName, locationName: ctx.locationName };
 
@@ -108,6 +109,21 @@ export default function SaleScreen() {
             {inv.customer_name ? <Label size={14}>{inv.customer_name} · RNC {inv.customer_rnc}</Label> : null}
             {inv.security_code ? <Label muted size={13}>Código de seguridad: {inv.security_code}</Label> : null}
             {inv.message ? <Label muted size={13}>{inv.message}</Label> : null}
+            {inv.status === 'enviada' ? (
+              <Button
+                variant="secondary"
+                icon="refresh"
+                title={busy ? 'Consultando…' : 'Actualizar estado'}
+                disabled={busy}
+                onPress={async () => {
+                  setBusy(true);
+                  const r = await refreshInvoice(inv.id);
+                  setBusy(false);
+                  setMsg(r.error ? { text: r.error } : { text: `Estado: ${r.invoice?.status ?? ''}`, ok: true });
+                  reload();
+                }}
+              />
+            ) : null}
             <Button icon="printer" title="Imprimir factura" onPress={() => print(inv)} />
           </Card>
         ))
@@ -151,6 +167,12 @@ export default function SaleScreen() {
           />
         </Card>
       )}
+      {lastRejected?.message && !msg ? (
+        <Card style={{ gap: 4 }}>
+          <Label bold size={14} color={t.danger}>La última vez fue rechazada ({lastRejected.encf})</Label>
+          <Label size={13} color={t.danger}>{lastRejected.message}</Label>
+        </Card>
+      ) : null}
       {msg ? (
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', borderRadius: 12, padding: 10, backgroundColor: msg.ok ? t.successSoft : t.dangerSoft }}>
           <Icon name={msg.ok ? 'check-circle' : 'alert-circle'} size={18} color={msg.ok ? t.success : t.danger} />

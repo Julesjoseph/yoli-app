@@ -42,6 +42,15 @@ export default function EinvoiceSettingsScreen() {
 
   async function save() {
     if (!s) return;
+    for (const d of [s.seq32_due, s.seq31_due]) {
+      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return setMsg({ text: 'La fecha de vencimiento va así: 2027-12-31.' });
+    }
+    if (s.enabled && s.provider === 'alanube' && !s.seq32_next && !s.seq31_next) {
+      return setMsg({ text: 'Pon al menos una secuencia e-NCF (la da la DGII).' });
+    }
+    if (s.enabled && s.provider === 'alanube' && !data?.tokenSaved && !token.trim()) {
+      return setMsg({ text: 'Pega la llave (token) de Alanube.' });
+    }
     setSaving(true);
     setMsg(null);
     const error = await saveEinvoiceSettings(ctx.businessId, s, token);
@@ -128,6 +137,47 @@ export default function EinvoiceSettingsScreen() {
                   placeholder={data?.tokenSaved ? '•••••••• (escribe para cambiarla)' : 'Pégala aquí'}
                 />
                 <Label muted size={13}>La llave se guarda en el servidor y nadie la puede volver a ver desde la app.</Label>
+                <Field
+                  label="Id de la compañía en Alanube (opcional)"
+                  icon="domain"
+                  value={s.provider_company_id ?? ''}
+                  onChangeText={(v) => set({ provider_company_id: v.trim() || null })}
+                  autoCapitalize="none"
+                  editable={owner}
+                  placeholder="Solo si Alanube te la dio (compañía asociada)"
+                />
+
+                <Label bold size={15}>Secuencias e-NCF autorizadas por la DGII</Label>
+                <Label muted size={13}>
+                  Las pides en la Oficina Virtual de la DGII. Pon el próximo número que vas a usar (sin la E32 / E31) y la
+                  fecha en que vence. La app sigue contando sola.
+                </Label>
+                {(['32', '31'] as const).map((k) => (
+                  <View key={k} style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Field
+                        label={`Próximo E${k}`}
+                        keyboardType="number-pad"
+                        value={s[`seq${k}_next`] ? String(s[`seq${k}_next`]) : ''}
+                        onChangeText={(v) => set({ [`seq${k}_next`]: v.replace(/\D/g, '') ? Number(v.replace(/\D/g, '')) : null })}
+                        editable={owner}
+                        placeholder="Ej. 1"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Field
+                        label="Vence"
+                        value={s[`seq${k}_due`] ?? ''}
+                        onChangeText={(v) => set({ [`seq${k}_due`]: v.trim() || null })}
+                        editable={owner}
+                        placeholder="AAAA-MM-DD"
+                      />
+                    </View>
+                  </View>
+                ))}
+                {s.seq32_next ? (
+                  <Label muted size={13}>Próxima factura de consumo: E32{String(s.seq32_next).padStart(10, '0')}</Label>
+                ) : null}
               </>
             ) : null}
 

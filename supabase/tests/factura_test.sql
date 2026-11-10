@@ -29,6 +29,25 @@ begin
   assert failed, 'nadie inventa facturas desde la app';
   select count(*) into n from einvoice_settings where business_id = biz;
   assert n = 1, 'el cajero ve la configuración';
+  failed := false;
+  begin perform take_encf(biz, '32'); exception when others then failed := true; end;
+  assert failed, 'la app no puede tomar e-NCF';
   raise notice 'PRUEBAS FACTURA OK';
 end $$;
 reset role;
+-- Secuencias: se toman en orden, sin repetir.
+do $$
+declare biz uuid; a text; b text;
+begin
+  select id into biz from businesses where name = 'Yoli Comida';
+  update einvoice_settings set seq32_next = 1, seq32_due = '2028-12-31' where business_id = biz;
+  select encf into a from take_encf(biz, '32');
+  select encf into b from take_encf(biz, '32');
+  assert a = 'E320000000001' and b = 'E320000000002', a || ' ' || b;
+  perform release_encf(biz, '32', a);   -- uno viejo no
+  perform release_encf(biz, '32', b);   -- el último se devuelve
+  select encf into b from take_encf(biz, '32');
+  assert b = 'E320000000002', 'devuelto ' || b;
+  begin perform take_encf(biz, '31'); assert false, 'sin secuencia 31'; exception when raise_exception then null; end;
+  raise notice 'PRUEBAS SECUENCIAS OK';
+end $$;

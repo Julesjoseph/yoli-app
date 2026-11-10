@@ -17,7 +17,7 @@ export const ECF_LABELS: Record<string, string> = {
 /** Proveedores que YOLI SOFT sabe usar. "prueba" no envía nada a la DGII. */
 export const PROVIDERS = [
   { value: 'prueba', label: 'Modo prueba', ready: true },
-  { value: 'alanube', label: 'Alanube', ready: false },
+  { value: 'alanube', label: 'Alanube', ready: true },
 ] as const;
 
 export interface EinvoiceSettings {
@@ -25,6 +25,13 @@ export interface EinvoiceSettings {
   environment: 'prueba' | 'produccion';
   enabled: boolean;
   default_type: EcfType;
+  /** Próximo número de la secuencia autorizada por la DGII (sin "E32") y su vencimiento. */
+  seq32_next: number | null;
+  seq32_due: string | null;
+  seq31_next: number | null;
+  seq31_due: string | null;
+  /** Id de la compañía en Alanube (solo si es una compañía asociada). */
+  provider_company_id: string | null;
 }
 
 export interface Invoice {
@@ -43,7 +50,17 @@ export interface Invoice {
   created_at: string;
 }
 
-const DEFAULTS: EinvoiceSettings = { provider: 'prueba', environment: 'prueba', enabled: false, default_type: '32' };
+const DEFAULTS: EinvoiceSettings = {
+  provider: 'prueba',
+  environment: 'prueba',
+  enabled: false,
+  default_type: '32',
+  seq32_next: null,
+  seq32_due: null,
+  seq31_next: null,
+  seq31_due: null,
+  provider_company_id: null,
+};
 
 function friendly(message: string) {
   if (/einvoice|schema cache|does not exist/i.test(message)) return 'Falta un paso en Supabase: corre el archivo 0012_factura_electronica.sql.';
@@ -56,7 +73,7 @@ export async function getEinvoiceSettings(
 ): Promise<{ settings: EinvoiceSettings; tokenSaved: boolean; error?: string }> {
   if (!supabase) return { settings: DEFAULTS, tokenSaved: false, error: 'Sin nube' };
   const [s, tk] = await Promise.all([
-    supabase.from('einvoice_settings').select('provider, environment, enabled, default_type').eq('business_id', businessId).maybeSingle(),
+    supabase.from('einvoice_settings').select('*').eq('business_id', businessId).maybeSingle(),
     supabase.rpc('einvoice_token_saved', { p_business: businessId }),
   ]);
   if (s.error) return { settings: DEFAULTS, tokenSaved: false, error: friendly(s.error.message) };
@@ -65,10 +82,16 @@ export async function getEinvoiceSettings(
 
 export async function saveEinvoiceSettings(businessId: string, s: EinvoiceSettings, token?: string): Promise<string | null> {
   if (!supabase) return 'Sin nube';
-  const { error } = await supabase
-    .from('einvoice_settings')
-    .upsert({ business_id: businessId, ...s, updated_at: new Date().toISOString() });
-  if (error) return /row-level|permission/i.test(error.message) ? 'Solo el dueño puede cambiar esto.' : friendly(error.message);
+  const row: Record<string, unknown> = { ...s, business_id: businessId, updated_at: new Date().toISOString() };
+  // Los campos de secuencias solo se envían si se usan (así funciona aunque falte 0013).
+  for (const k of ['seq32_next', 'seq32_due', 'seq31_next', 'seq31_due', 'provider_company_id']) {
+    if (row[k] === null || row[k] === undefined || row[k] === '') delete row[k];
+  }
+  const { error } = await supabase.from('einvoice_settings').upsert(row);
+  if (error) {
+    if (/seq3|provider_company_id/i.test(error.message)) return 'Falta un paso en Supabase: corre el archivo 0013_secuencias_ecf.sql.';
+    return /row-level|permission/i.test(error.message) ? 'Solo el dueño puede cambiar esto.' : friendly(error.message);
+  }
   if (token !== undefined && token.trim()) {
     const r = await supabase.rpc('set_einvoice_token', { p_business: businessId, p_token: token });
     if (r.error) return friendly(r.error.message);
@@ -80,6 +103,14 @@ export async function listInvoices(orderId: string): Promise<Invoice[]> {
   if (!supabase) return [];
   const { data } = await supabase.from('invoices').select('*').eq('order_id', orderId).order('created_at');
   return (data ?? []) as Invoice[];
+}
+
+/** Vuelve a preguntar al proveedor cómo va la factura (aceptada, rechazada…). */
+export async function refreshInvoice(invoiceId: string): Promise<{ invoice?: Invoice; error?: string }> {
+  if (!supabase) return { error: 'Sin nube' };
+  const { data, error } = await supabase.functions.invoke('emitir-ecf', { body: { action: 'status', invoice_id: invoiceId } });
+  if (error) return { error: friendly(error.message) };
+  return { invoice: (data as { invoice: Invoice }).invoice };
 }
 
 export async function emitInvoice(
