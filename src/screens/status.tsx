@@ -1,4 +1,4 @@
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Linking, View } from 'react-native';
 
 import { Text } from '@/components/text';
 
@@ -7,6 +7,7 @@ import { Logo } from '@/components/logo';
 import { Button, Label, Screen } from '@/components/ui';
 import { useBusinessState } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
+import { SUPPORT_EMAIL, SUPPORT_WHATSAPP } from '@/sync/config';
 
 export function LoadingScreen({ message }: { message?: string }) {
   const t = useTheme();
@@ -27,6 +28,32 @@ export function ErrorScreen({ message }: { message: string }) {
       <Label>{message}</Label>
       <Button title="Intentar de nuevo" onPress={reload} />
       {!auth.demo ? <Button title="Cerrar sesión" variant="secondary" onPress={auth.signOut} /> : null}
+    </Screen>
+  );
+}
+
+/** Suscripción vencida o suspendida: no se puede seguir vendiendo hasta renovar. */
+export function BlockedScreen({ access, businessName }: { access: 'vencido' | 'suspendido'; businessName: string }) {
+  const { reload } = useBusinessState();
+  const auth = useAuth();
+  const t = useTheme();
+  const msg = encodeURIComponent(`Hola, quiero renovar YOLI para mi negocio "${businessName}".`);
+  return (
+    <Screen title={access === 'suspendido' ? 'Cuenta suspendida' : 'Tu prueba terminó'}>
+      <Label>
+        {access === 'suspendido'
+          ? `La cuenta de "${businessName}" está suspendida. Comunícate con YOLI para reactivarla.`
+          : `La suscripción de "${businessName}" venció. Renueva para seguir usando la caja, el inventario y los reportes. Tus datos están guardados y no se pierden.`}
+      </Label>
+      {SUPPORT_WHATSAPP ? (
+        <Button icon="whatsapp" title="Renovar por WhatsApp" onPress={() => Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP}?text=${msg}`)} />
+      ) : null}
+      {SUPPORT_EMAIL ? (
+        <Button variant="secondary" icon="email-outline" title={SUPPORT_EMAIL} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${msg}`)} />
+      ) : null}
+      <Label muted size={13} color={t.textSecondary}>Cuando te activen, toca “Ya renové”.</Label>
+      <Button variant="secondary" icon="refresh" title="Ya renové" onPress={reload} />
+      <Button variant="ghost" icon="logout" title="Cerrar sesión" onPress={auth.signOut} />
     </Screen>
   );
 }

@@ -34,7 +34,7 @@ export default function SettingsScreen() {
   const db = useSQLiteContext();
   const ctx = useBusiness();
   const auth = useAuth();
-  const { changeLocation, reload } = useBusinessState();
+  const { changeLocation, reload, plan, isAdmin } = useBusinessState();
   const t = useTheme();
   const theme = useThemePreference();
   const manager = canManage(ctx);
@@ -54,7 +54,11 @@ export default function SettingsScreen() {
     { icon: 'package-variant', label: 'Inventario', hint: 'Stock e insumos del local', onPress: () => router.push('/inventario') },
     { icon: 'printer-pos', label: 'Impresora y ticket', hint: 'Datos del ticket y papel de 58 u 80 mm', onPress: () => router.push('/impresora') },
     { icon: 'receipt-text-check-outline', label: 'Orden actual', hint: 'Ver la orden de la caja', onPress: () => router.push('/orden') },
+    ...(isAdmin
+      ? [{ icon: 'shield-crown-outline' as const, label: 'Clientes de YOLI', hint: 'Suscripciones y actividad de cada negocio', onPress: () => router.push('/admin') }]
+      : []),
   ];
+  const trialDays = plan?.trialEndsAt ? Math.max(0, Math.ceil((new Date(plan.trialEndsAt).getTime() - Date.now()) / 86_400_000)) : 0;
 
   async function sync() {
     const r = await pushOutbox(db);
@@ -80,6 +84,10 @@ export default function SettingsScreen() {
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 2 }}>
           <Pill text={ROLE_LABELS[ctx.role].toUpperCase()} color={t.primary} />
           {ctx.demo ? <Pill text="DEMO" color={t.info} /> : null}
+          {!ctx.demo && plan?.access === 'prueba' ? <Pill text={`PRUEBA · ${trialDays} ${trialDays === 1 ? 'DÍA' : 'DÍAS'}`} color={t.info} /> : null}
+          {!ctx.demo && plan?.access === 'activo' && plan.paidUntil ? (
+            <Pill text={`ACTIVO HASTA ${new Date(`${plan.paidUntil}T12:00:00`).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' }).toUpperCase()}`} color={t.success} />
+          ) : null}
         </View>
       </View>
 

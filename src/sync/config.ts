@@ -15,3 +15,10 @@ export const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_pub
  */
 export const DEMO_EMAIL = 'demo@yoli.app';
 export const DEMO_PASSWORD = 'YoliDemo-2026';
+
+/**
+ * Contacto de YOLI para que los clientes renueven su suscripción.
+ * WhatsApp en formato internacional sin "+" ni espacios (ej. '18095551234'). Vacío = no se muestra.
+ */
+export const SUPPORT_WHATSAPP = '';
+export const SUPPORT_EMAIL = '';

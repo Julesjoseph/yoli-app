@@ -15,7 +15,7 @@ import { CartProvider } from '@/hooks/use-cart';
 import { ChooseLocationScreen } from '@/screens/choose-location';
 import { CreateBusinessScreen } from '@/screens/create-business';
 import { LoginScreen } from '@/screens/login';
-import { ErrorScreen, LoadingScreen } from '@/screens/status';
+import { BlockedScreen, ErrorScreen, LoadingScreen } from '@/screens/status';
 
 function Gate() {
   const { phase } = useBusinessState();
@@ -30,6 +30,8 @@ function Gate() {
       return <ChooseLocationScreen options={phase.options} />;
     case 'error':
       return <ErrorScreen message={phase.message} />;
+    case 'blocked':
+      return <BlockedScreen access={phase.access} businessName={phase.businessName} />;
     case 'ready':
       return (
         <CartProvider>

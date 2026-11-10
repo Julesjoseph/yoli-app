@@ -56,6 +56,11 @@ begin
   insert into businesses (name) values ('Negocio demo') returning id into v_biz;
   insert into locations (business_id, name, kind) values (v_biz, 'Local principal', 'mixto') returning id into v_loc;
   insert into members (business_id, user_id, role, display_name) values (v_biz, v_user, 'dueno', 'Demo');
+  -- El demo nunca vence (si ya existe la tabla de suscripciones, migración 0008).
+  if to_regclass('public.subscriptions') is not null then
+    execute 'insert into subscriptions (business_id, status) values ($1, ''activo'')
+             on conflict (business_id) do update set status = ''activo'', paid_until = null' using v_biz;
+  end if;
   insert into platform_commissions (business_id, platform_id, commission_rate)
     values (v_biz, 'pedidosya', 0.25), (v_biz, 'ubereats', 0.30);
 

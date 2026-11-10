@@ -16,6 +16,14 @@ const REALTIME_TABLES = [
   'platform_commissions', 'locations',
 ];
 
+export type BusinessKind = 'comida_rapida' | 'comedor' | 'cafeteria' | 'mixto';
+
+export interface Plan {
+  access: 'activo' | 'prueba' | 'vencido' | 'suspendido';
+  trialEndsAt: string | null;
+  paidUntil: string | null;
+}
+
 export interface LocationOption {
   id: string;
   name: string;
@@ -27,13 +35,18 @@ type Phase =
   | { kind: 'no-business' }
   | { kind: 'choose-location'; options: LocationOption[] }
   | { kind: 'error'; message: string }
+  | { kind: 'blocked'; access: 'vencido' | 'suspendido'; businessName: string }
   | { kind: 'ready'; ctx: Context };
 
 interface BusinessState {
   phase: Phase;
   chooseLocation(loc: LocationOption): Promise<void>;
   changeLocation(): Promise<void>;
-  createBusiness(name: string, rnc: string, locationName: string): Promise<string | null>;
+  createBusiness(name: string, rnc: string, locationName: string, kind?: BusinessKind, phone?: string): Promise<string | null>;
+  /** Suscripción del negocio (prueba gratis, activo hasta, etc.). Nulo en el demo local. */
+  plan: Plan | null;
+  /** true para el dueño de YOLI (administrador de la plataforma). */
+  isAdmin: boolean;
   /** Sube cada vez que llegan cambios de la nube: las pantallas se recargan solas. */
   syncTick: number;
   reload(): void;
@@ -64,6 +77,8 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [version, setVersion] = useState(0);
   const [syncTick, setSyncTick] = useState(0);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   const userId = auth.session?.user.id;
 
@@ -73,6 +88,10 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       if (auth.loading) return set({ kind: 'loading' });
+      if (auth.demo || !userId) {
+        setPlan(null);
+        setIsAdmin(false);
+      }
       if (auth.demo) {
         await ensureDemoData(db);
         const ctx = await getContext(db);
@@ -99,6 +118,26 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       // Si pertenece a varios negocios, por ahora se usa el primero.
       const businessId = rows[0].business_id;
       const mine = rows.filter((r) => r.business_id === businessId);
+
+      // Suscripción (si la nube aún no tiene la migración 0008, se toma como activa).
+      const [accessRes, subRes, adminRes] = await Promise.all([
+        supabase.rpc('business_access', { b: businessId }),
+        supabase.from('subscriptions').select('trial_ends_at, paid_until').eq('business_id', businessId).maybeSingle(),
+        supabase.rpc('is_platform_admin'),
+      ]);
+      const access = (accessRes.error ? 'activo' : accessRes.data) as Plan['access'];
+      const admin = !adminRes.error && adminRes.data === true;
+      if (!cancelled) {
+        setIsAdmin(admin);
+        setPlan({
+          access,
+          trialEndsAt: (subRes.data?.trial_ends_at as string | undefined) ?? null,
+          paidUntil: (subRes.data?.paid_until as string | undefined) ?? null,
+        });
+      }
+      if ((access === 'vencido' || access === 'suspendido') && !admin) {
+        return set({ kind: 'blocked', access, businessName: mine[0].businesses?.name ?? '' });
+      }
       const role = mine.map((r) => r.role).sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])[0];
 
       const previousBusiness = await getSetting(db, 'business_id');
@@ -217,6 +256,8 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const value: BusinessState = {
     phase,
     syncTick,
+    plan,
+    isAdmin,
     reload,
     async chooseLocation(loc) {
       await setSettings(db, { location_id: loc.id, location_name: loc.name });
@@ -227,13 +268,12 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       await setSettings(db, { location_id: null, location_name: null });
       reload();
     },
-    async createBusiness(name, rnc, locationName) {
+    async createBusiness(name, rnc, locationName, kind = 'mixto', phone = '') {
       if (!supabase) return null;
-      const { error } = await supabase.rpc('create_business', {
-        p_name: name.trim(),
-        p_rnc: rnc.trim(),
-        p_location_name: locationName.trim(),
-      });
+      const base = { p_name: name.trim(), p_rnc: rnc.trim(), p_location_name: locationName.trim() };
+      let { error } = await supabase.rpc('create_business', { ...base, p_kind: kind, p_phone: phone.trim() });
+      // Nube sin la migración 0008: crear sin tipo ni teléfono.
+      if (error && /p_kind|function/i.test(error.message)) ({ error } = await supabase.rpc('create_business', base));
       if (error) return error.message;
       reload();
       return null;

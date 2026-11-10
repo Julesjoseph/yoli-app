@@ -131,3 +131,21 @@ Los pedidos de PedidosYa pueden entrar solos como ventas del canal "PedidosYa":
 Los productos se unen por SKU (= id del producto en YOLI) o por nombre igual. Cada aviso
 queda en `delivery_events` con su resultado, para revisar si algo no entró.
 Prueba local: `supabase/tests/pedidosya_test.sql`.
+
+## Vender YOLI a otros negocios (suscripciones)
+
+YOLI ya es multi-negocio: cada cliente crea su cuenta, su negocio y sus locales, y solo ve sus datos (RLS).
+
+1. Correr `supabase/migrations/0008_suscripciones.sql` en el SQL Editor.
+   - Los negocios que ya existían quedan **activos sin vencimiento**.
+   - Cada negocio nuevo recibe **14 días de prueba gratis**.
+2. Hacerte administrador de YOLI (una sola vez, con tu correo):
+   ```sql
+   insert into platform_admins (user_id)
+   select id from auth.users where email = 'TU_CORREO' on conflict do nothing;
+   ```
+3. En la app: Perfil › **Clientes de YOLI**. Ahí ves cada negocio, su dueño, ventas de 30 días y
+   su suscripción, con botones **+1 mes**, **+1 año** y **Suspender**.
+4. Con la suscripción vencida o suspendida, el cliente ve la pantalla "Tu prueba terminó" y el
+   servidor no acepta ventas ni gastos nuevos (sus datos no se borran).
+5. Contacto para renovar: `SUPPORT_WHATSAPP` y `SUPPORT_EMAIL` en `src/sync/config.ts`.
