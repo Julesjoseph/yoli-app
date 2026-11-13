@@ -84,6 +84,7 @@ export default function CatalogScreen() {
       {tab === 'productos' ? (
         <>
           <Button icon="plus" title="Nuevo producto" onPress={() => router.push('/catalogo/producto')} />
+          <Button variant="secondary" icon="image-multiple-outline" title="Poner fotos a varios productos" onPress={() => router.push('/catalogo/fotos')} />
           {products.length === 0 ? (
             <Card style={{ alignItems: 'center' }}>
               <EmptyState

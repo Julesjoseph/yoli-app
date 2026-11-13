@@ -357,3 +357,11 @@ export async function loadSampleCatalog(db: SQLiteDatabase, ctx: Context) {
     );
   }
 }
+
+/** Cambia solo la foto de un producto. */
+export async function setProductImage(db: SQLiteDatabase, ctx: Context, productId: string, imageUrl: string | null) {
+  await cloud(ctx, () =>
+    supabase!.from('products').update({ image_url: imageUrl, updated_at: new Date().toISOString() }).eq('id', productId),
+  );
+  await db.runAsync('UPDATE products SET image_url = ? WHERE id = ?', [imageUrl, productId]);
+}
