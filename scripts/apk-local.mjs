@@ -80,11 +80,31 @@ if (win) {
 
 console.log('\n1/3 Preparando el proyecto Android…');
 run('npx expo prebuild --platform android --clean --no-install');
-// CMake más nuevo (su ninja sí acepta rutas largas en Windows). Gradle lo baja solo.
-const appGradle = join('android', 'app', 'build.gradle');
-const g = readFileSync(appGradle, 'utf8');
-if (!g.includes('version "3.31.6"')) {
-  writeFileSync(appGradle, g.replace(/\nandroid \{\n/, '\nandroid {\n    externalNativeBuild { cmake { version "3.31.6" } }\n'));
+// CMake más nuevo (su ninja sí acepta rutas largas en Windows). Usa el más nuevo instalado en el SDK.
+if (win) {
+  const ver = (d) => d.split('.').map(Number);
+  const newer = (a, b) => { const x = ver(a), y = ver(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+  const installed = () => { try { return readdirSync(join(sdk, 'cmake')).filter((d) => /^\d+\.\d+\.\d+/.test(d)); } catch { return []; } };
+  let best = installed().filter((d) => newer(d, '3.29.9')).sort((a, b) => (newer(a, b) ? -1 : 1))[0];
+  if (!best) {
+    const sdkm = [join(sdk, 'cmdline-tools', 'latest', 'bin', 'sdkmanager.bat'), ...(() => { try { return readdirSync(join(sdk, 'cmdline-tools')).map((d) => join(sdk, 'cmdline-tools', d, 'bin', 'sdkmanager.bat')); } catch { return []; } })()].find((p) => existsSync(p));
+    if (sdkm) {
+      console.log('Instalando CMake 3.31.6…');
+      try { execSync(`"${sdkm}" "cmake;3.31.6"`, { stdio: 'inherit', env, input: 'y\n' }); } catch {}
+      best = installed().filter((d) => newer(d, '3.29.9'))[0];
+    }
+  }
+  if (!best) {
+    console.error(
+      '\nFalta una versión nueva de CMake. En Android Studio: More Actions > SDK Manager > pestaña "SDK Tools".\n' +
+        'Abajo a la derecha marca "Show Package Details", abre "CMake", marca la 3.31.6 (o la 3.31 más alta), Apply y OK.\n' +
+        'Luego vuelve a correr: npm run apk:local\n',
+    );
+    process.exit(1);
+  }
+  console.log(`CMake: ${best}`);
+  const appGradle = join('android', 'app', 'build.gradle');
+  writeFileSync(appGradle, readFileSync(appGradle, 'utf8').replace(/\nandroid \{\n/, `\nandroid {\n    externalNativeBuild { cmake { version "${best}" } }\n`));
 }
 writeFileSync(join('android', 'local.properties'), `sdk.dir=${sdk.replace(/\\/g, '\\\\').replace(/:/g, '\\:')}\n`);
 
