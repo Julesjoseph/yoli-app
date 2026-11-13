@@ -1,7 +1,7 @@
 // Arma la APK en tu PC (sin EAS): npm run apk:local
 // Necesita Android Studio instalado (trae el SDK y Java).
 import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const win = process.platform === 'win32';
@@ -60,12 +60,38 @@ if (env.JAVA_HOME && env.JAVA_HOME !== java) console.log(`(JAVA_HOME apuntaba a 
 env.JAVA_HOME = java;
 console.log(`SDK: ${sdk}\nJava: ${java}`);
 
+// Windows: algunos archivos de compilación pasan de 260 letras. Hace falta "rutas largas" activado
+// y una versión de CMake cuyo ninja las soporte (la 3.22 que trae Android no).
+if (win) {
+  let longOk = false;
+  try {
+    longOk = /0x1\b/.test(execSync('reg query HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem /v LongPathsEnabled', { encoding: 'utf8' }));
+  } catch {}
+  if (!longOk) {
+    console.error(
+      '\nWindows tiene apagadas las "rutas largas" y la APK no compila sin eso.\n' +
+        'Abre PowerShell COMO ADMINISTRADOR (clic derecho > Ejecutar como administrador) y pega:\n\n' +
+        '  New-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\FileSystem" -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force\n\n' +
+        'Luego reinicia la PC y vuelve a correr: npm run apk:local\n',
+    );
+    process.exit(1);
+  }
+}
+
 console.log('\n1/3 Preparando el proyecto Android…');
 run('npx expo prebuild --platform android --clean --no-install');
+// CMake más nuevo (su ninja sí acepta rutas largas en Windows). Gradle lo baja solo.
+const appGradle = join('android', 'app', 'build.gradle');
+const g = readFileSync(appGradle, 'utf8');
+if (!g.includes('version "3.31.6"')) {
+  writeFileSync(appGradle, g.replace(/\nandroid \{\n/, '\nandroid {\n    externalNativeBuild { cmake { version "3.31.6" } }\n'));
+}
 writeFileSync(join('android', 'local.properties'), `sdk.dir=${sdk.replace(/\\/g, '\\\\').replace(/:/g, '\\:')}\n`);
 
 console.log('\n2/3 Compilando la APK (la primera vez tarda 10-20 minutos)…');
-run(win ? 'gradlew.bat assembleRelease' : './gradlew assembleRelease', 'android');
+// Solo los procesadores de celulares y tablets reales (no emuladores): compila en la mitad del tiempo.
+const archs = '-PreactNativeArchitectures=arm64-v8a,armeabi-v7a';
+run(`${win ? 'gradlew.bat' : './gradlew'} assembleRelease ${archs}`, 'android');
 
 const out = join('android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
 if (!existsSync(out)) {
