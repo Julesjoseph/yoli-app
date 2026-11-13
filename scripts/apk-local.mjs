@@ -1,7 +1,7 @@
 // Arma la APK en tu PC (sin EAS): npm run apk:local
 // Necesita Android Studio instalado (trae el SDK y Java).
 import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const win = process.platform === 'win32';
@@ -27,15 +27,36 @@ if (!sdk || !existsSync(join(sdk, 'platforms'))) {
 }
 env.ANDROID_HOME = sdk;
 
-const java = first([
+// Busca un Java que sirva: la variable, o el "jbr" de Android Studio (donde sea que se haya instalado).
+const okJava = (p) => p && existsSync(join(p, 'lib', 'jvm.cfg')) && existsSync(join(p, 'bin', win ? 'java.exe' : 'java'));
+const studioDirs = (base) => {
+  try {
+    return readdirSync(base).filter((d) => /android studio/i.test(d)).map((d) => join(base, d, 'jbr'));
+  } catch {
+    return [];
+  }
+};
+const javaCandidates = [
   env.JAVA_HOME,
-  win && 'C:\\Program Files\\Android\\Android Studio\\jbr',
-  !win && '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
-]);
+  ...(win
+    ? [
+        ...studioDirs('C:\\Program Files\\Android'),
+        ...studioDirs('C:\\Program Files'),
+        ...(env.LOCALAPPDATA ? studioDirs(join(env.LOCALAPPDATA, 'Programs')) : []),
+        ...(env.LOCALAPPDATA ? studioDirs(join(env.LOCALAPPDATA, 'Programs', 'Android')) : []),
+      ]
+    : ['/Applications/Android Studio.app/Contents/jbr/Contents/Home']),
+];
+const java = javaCandidates.find(okJava);
 if (!java) {
-  console.error('\nNo encuentro Java. Ponle a JAVA_HOME la carpeta "jbr" de Android Studio.\n');
+  console.error(
+    '\nNo encuentro un Java que sirva. Probé:\n' +
+      javaCandidates.filter(Boolean).map((p) => `  - ${p}`).join('\n') +
+      '\nBusca la carpeta donde se instaló Android Studio y dime su ruta.\n',
+  );
   process.exit(1);
 }
+if (env.JAVA_HOME && env.JAVA_HOME !== java) console.log(`(JAVA_HOME apuntaba a ${env.JAVA_HOME}, que no sirve; uso otra.)`);
 env.JAVA_HOME = java;
 console.log(`SDK: ${sdk}\nJava: ${java}`);
 
