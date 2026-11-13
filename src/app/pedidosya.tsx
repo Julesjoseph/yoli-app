@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
@@ -78,6 +79,15 @@ export default function PedidosYaScreen() {
       {data?.error ? (
         <Card><Label color={t.danger}>{data.error}</Label></Card>
       ) : null}
+
+      <SectionTitle icon="database-import-outline">Mientras tanto</SectionTitle>
+      <Card style={{ gap: 8 }}>
+        <Label muted size={13}>
+          Sube el reporte "Detalle de pedidos" del Portal de PedidosYa y las ventas entran solas, con su comisión y el
+          inventario.
+        </Label>
+        <Button icon="file-upload-outline" title="Importar ventas del reporte" onPress={() => router.push('/importar-pedidosya')} />
+      </Card>
 
       <SectionTitle icon="storefront-outline">Tus locales</SectionTitle>
       <Card style={{ gap: 12 }}>

@@ -127,6 +127,36 @@ export async function getCommissionRates(db: SQLiteDatabase, businessId: string)
   return Object.fromEntries(rows.map((r) => [r.platform_id, r.commission_rate])) as Record<string, number>;
 }
 
+
+/** Cuánto inventario consume una venta: el producto, lo que trae siempre (combo) y lo que eligió el cliente. */
+async function inventoryUsage(db: SQLiteDatabase, lines: { product: Product; quantity: number }[]) {
+  if (!lines.length) return new Map<string, number>();
+  const baseIds = [...new Set(lines.map((l) => l.product.base_id ?? l.product.id))];
+  const fixed = await db.getAllAsync<{ product_id: string; item_product_id: string }>(
+    `SELECT product_id, item_product_id FROM combo_items
+     WHERE group_name = '' AND product_id IN (${baseIds.map(() => '?').join(',')})`,
+    baseIds,
+  );
+  const sold = lines.flatMap((l) => {
+    const base = l.product.base_id ?? l.product.id;
+    return [
+      { productId: base, quantity: l.quantity },
+      ...fixed.filter((f) => f.product_id === base).map((f) => ({ productId: f.item_product_id, quantity: l.quantity })),
+      ...(l.product.chosen ?? []).map((id) => ({ productId: id, quantity: l.quantity })),
+    ];
+  });
+  const productIds = [...new Set(sold.map((s) => s.productId))];
+  const recipes = await db.getAllAsync<{ product_id: string; ingredient_id: string; quantity: number }>(
+    `SELECT product_id, ingredient_id, quantity FROM recipe_items
+     WHERE product_id IN (${productIds.map(() => '?').join(',')})`,
+    productIds,
+  );
+  return ingredientUsage(
+    sold,
+    recipes.map<RecipeItem>((r) => ({ productId: r.product_id, ingredientId: r.ingredient_id, quantity: r.quantity })),
+  );
+}
+
 /**
  * Registra una venta: orden + líneas + descuento de inventario según receta,
  * todo en una transacción y en la cola de sincronización.
@@ -152,31 +182,7 @@ export async function recordSale(
     input.channel,
     { commissionRate: rates[input.channel] ?? 0, applyTipLaw: input.applyTipLaw, discount: input.discount },
   );
-  // Lo que se descuenta del inventario: el producto, lo que trae siempre (combo) y lo que eligió el cliente.
-  const baseIds = [...new Set(input.lines.map((l) => l.product.base_id ?? l.product.id))];
-  const fixed = await db.getAllAsync<{ product_id: string; item_product_id: string }>(
-    `SELECT product_id, item_product_id FROM combo_items
-     WHERE group_name = '' AND product_id IN (${baseIds.map(() => '?').join(',')})`,
-    baseIds,
-  );
-  const sold = input.lines.flatMap((l) => {
-    const base = l.product.base_id ?? l.product.id;
-    return [
-      { productId: base, quantity: l.quantity },
-      ...fixed.filter((f) => f.product_id === base).map((f) => ({ productId: f.item_product_id, quantity: l.quantity })),
-      ...(l.product.chosen ?? []).map((id) => ({ productId: id, quantity: l.quantity })),
-    ];
-  });
-  const productIds = [...new Set(sold.map((s) => s.productId))];
-  const recipes = await db.getAllAsync<{ product_id: string; ingredient_id: string; quantity: number }>(
-    `SELECT product_id, ingredient_id, quantity FROM recipe_items
-     WHERE product_id IN (${productIds.map(() => '?').join(',')})`,
-    productIds,
-  );
-  const usage = ingredientUsage(
-    sold,
-    recipes.map<RecipeItem>((r) => ({ productId: r.product_id, ingredientId: r.ingredient_id, quantity: r.quantity })),
-  );
+  const usage = await inventoryUsage(db, input.lines);
 
   const now = new Date().toISOString();
   const order = {
@@ -242,6 +248,88 @@ export async function recordSale(
   });
 
   return { order, totals };
+}
+
+/**
+ * Guarda una venta que ya pasó en una plataforma (por ejemplo, del reporte de
+ * PedidosYa): con su fecha, sus precios y lo que de verdad le quedó al negocio.
+ * Si ya existe (mismo id), no hace nada. Devuelve true si la guardó.
+ */
+export async function recordImportedSale(
+  db: SQLiteDatabase,
+  ctx: Context,
+  input: {
+    id: string;
+    channel: Channel;
+    externalRef: string;
+    createdAt: string;
+    lines: { product: Product | null; name: string; quantity: number; unitPrice: number }[];
+    /** Descuento que pagó el negocio (con ITBIS). */
+    discount: number;
+    /** Lo que le queda al negocio después de comisiones y cargos. */
+    netIncome: number;
+  },
+): Promise<boolean> {
+  const exists = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM orders WHERE id = ? OR (channel = ? AND external_ref = ?)',
+    [input.id, input.channel, input.externalRef],
+  );
+  if (exists) return false;
+  const totals = computeOrderTotals(
+    input.lines.map((l) => ({ unitPrice: l.unitPrice, quantity: l.quantity, itbisRate: l.product ? itbisFor(l.product, input.channel) : 0.18 })),
+    input.channel,
+    { discount: input.discount, applyTipLaw: false },
+  );
+  const matched = input.lines.filter((l): l is typeof l & { product: Product } => !!l.product);
+  const usage = await inventoryUsage(db, matched);
+  const order = {
+    id: input.id,
+    business_id: ctx.businessId,
+    location_id: ctx.locationId,
+    channel: input.channel,
+    external_ref: input.externalRef,
+    status: 'pagada',
+    subtotal: totals.subtotal,
+    itbis: totals.itbis,
+    tip_law: 0,
+    total: totals.total,
+    platform_commission: round2(totals.gross - input.netIncome),
+    net_income: round2(input.netIncome),
+    payment_method: 'plataforma' as PaymentMethod,
+    created_at: input.createdAt,
+    discount: totals.discount,
+  };
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO orders (id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law,
+        total, platform_commission, net_income, payment_method, created_at, discount)
+       VALUES ($id, $business_id, $location_id, $channel, $external_ref, $status, $subtotal, $itbis, $tip_law,
+        $total, $platform_commission, $net_income, $payment_method, $created_at, $discount)`,
+      Object.fromEntries(Object.entries(order).map(([k, v]) => ['$' + k, v])),
+    );
+    const cloudOrder: Record<string, unknown> = { ...order };
+    if (!order.discount) delete cloudOrder.discount;
+    await enqueue(db, 'orders', cloudOrder, ctx);
+    for (const l of input.lines) {
+      const item = {
+        id: randomUUID(),
+        order_id: order.id,
+        product_id: l.product ? l.product.base_id ?? l.product.id : null,
+        name: l.product?.name ?? l.name,
+        unit_price: round2(l.unitPrice),
+        quantity: l.quantity,
+      };
+      await db.runAsync(
+        'INSERT INTO order_items (id, order_id, product_id, name, unit_price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
+        [item.id, item.order_id, item.product_id, item.name, item.unit_price, item.quantity],
+      );
+      await enqueue(db, 'order_items', item);
+    }
+    for (const [ingredientId, qty] of usage) {
+      await insertMovement(db, ctx, ingredientId, -qty, 'venta', { orderId: order.id, createdAt: input.createdAt });
+    }
+  });
+  return true;
 }
 
 async function insertMovement(
