@@ -87,6 +87,7 @@ export default function PedidosYaScreen() {
           inventario.
         </Label>
         <Button icon="file-upload-outline" title="Importar ventas del reporte" onPress={() => router.push('/importar-pedidosya')} />
+        <Button variant="secondary" icon="silverware-fork-knife" title="Traer mi menú (productos y fotos)" onPress={() => router.push('/importar-menu-pedidosya')} />
       </Card>
 
       <SectionTitle icon="storefront-outline">Tus locales</SectionTitle>

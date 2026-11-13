@@ -85,6 +85,7 @@ export default function CatalogScreen() {
         <>
           <Button icon="plus" title="Nuevo producto" onPress={() => router.push('/catalogo/producto')} />
           <Button variant="secondary" icon="image-multiple-outline" title="Poner fotos a varios productos" onPress={() => router.push('/catalogo/fotos')} />
+          <Button variant="secondary" icon="moped-outline" title="Traer mi menú de PedidosYa" onPress={() => router.push('/importar-menu-pedidosya')} />
           {products.length === 0 ? (
             <Card style={{ alignItems: 'center' }}>
               <EmptyState

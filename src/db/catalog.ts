@@ -365,3 +365,32 @@ export async function setProductImage(db: SQLiteDatabase, ctx: Context, productI
   );
   await db.runAsync('UPDATE products SET image_url = ? WHERE id = ?', [imageUrl, productId]);
 }
+
+/**
+ * Copia a tus fotos una imagen que está en internet (por ejemplo, la de tu menú
+ * de PedidosYa). Si no se puede copiar, se usa el enlace tal cual.
+ */
+export async function copyImageFromUrl(ctx: Context, url: string): Promise<string> {
+  if (ctx.demo || !supabase) return url;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return url;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const type = res.headers.get('content-type') ?? 'image/jpeg';
+    const ext = /png/.test(type) ? 'png' : /webp/.test(type) ? 'webp' : 'jpg';
+    const path = `${ctx.businessId}/${randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('productos').upload(path, bytes, { contentType: type });
+    if (error) return url;
+    return supabase.storage.from('productos').getPublicUrl(path).data.publicUrl;
+  } catch {
+    return url;
+  }
+}
+
+/** Cambia solo el precio de PedidosYa de un producto. */
+export async function setProductPedidosYaPrice(db: SQLiteDatabase, ctx: Context, productId: string, price: number) {
+  await cloud(ctx, () =>
+    supabase!.from('products').update({ price_pedidosya: price, updated_at: new Date().toISOString() }).eq('id', productId),
+  );
+  await db.runAsync('UPDATE products SET price_pedidosya = ? WHERE id = ?', [price, productId]);
+}
