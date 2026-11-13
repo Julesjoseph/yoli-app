@@ -205,3 +205,50 @@ export function orderIdFromRef(ref: string): string {
   const hex = [h1 ^ h2 ^ h3 ^ h4, h2 ^ h1, h3 ^ h1, h4 ^ h1].map((n) => (n >>> 0).toString(16).padStart(8, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${'89ab'[parseInt(hex[16], 16) % 4]}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
+
+/** Nombre limpio para crear el producto: sin opciones entre corchetes ni espacios dobles. */
+export function cleanProductName(s: string) {
+  const t = s.replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/**
+ * Precio aproximado de cada artículo según los pedidos del reporte. Primero con
+ * los pedidos de un solo artículo; luego los que tienen un solo precio que falta.
+ * `known` son precios que ya se saben (productos que ya están en YOLI).
+ */
+export function estimatePrices(orders: ReportOrder[], known: Record<string, number> = {}): Record<string, number> {
+  const est: Record<string, number> = { ...known };
+  const samples: Record<string, number[]> = {};
+  const add = (k: string, v: number) => {
+    if (v > 0 && Number.isFinite(v)) (samples[k] ??= []).push(v);
+  };
+  const median = (xs: number[]) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.floor((s.length - 1) / 2)];
+  };
+  const usable = orders.filter((o) => o.status !== 'otro' && o.subtotal > 0 && o.items.length);
+  for (const o of usable) {
+    if (o.items.length === 1) add(normalizeName(o.items[0].name), o.subtotal / o.items[0].quantity);
+  }
+  for (const [k, xs] of Object.entries(samples)) if (!(k in est)) est[k] = median(xs);
+  for (let pass = 0; pass < 4; pass++) {
+    const found: Record<string, number[]> = {};
+    for (const o of usable) {
+      const missing = o.items.filter((i) => !(normalizeName(i.name) in est));
+      if (missing.length !== 1) continue;
+      const rest = o.items.reduce((n, i) => n + (normalizeName(i.name) in est ? est[normalizeName(i.name)] * i.quantity : 0), 0);
+      const v = (o.subtotal - rest) / missing[0].quantity;
+      if (v > 0) (found[normalizeName(missing[0].name)] ??= []).push(v);
+    }
+    if (!Object.keys(found).length) break;
+    for (const [k, xs] of Object.entries(found)) est[k] = median(xs);
+  }
+  // Lo que aún falte: parte igual del pedido.
+  for (const o of usable) {
+    const qty = o.items.reduce((n, i) => n + i.quantity, 0);
+    for (const i of o.items) if (!(normalizeName(i.name) in est)) est[normalizeName(i.name)] = o.subtotal / qty;
+  }
+  for (const k of Object.keys(est)) est[k] = Math.round(est[k] / 5) * 5 || Math.round(est[k] * 100) / 100;
+  return est;
+}

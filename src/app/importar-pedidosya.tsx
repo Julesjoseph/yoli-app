@@ -1,4 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
+import { randomUUID } from 'expo-crypto';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useMemo, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
@@ -9,7 +10,16 @@ import { listProducts, recordImportedSale, type Product } from '@/db/repo';
 import { useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD, priceFor } from '@/lib/calc';
-import { normalizeName, orderIdFromRef, parsePedidosYaReport, splitPrices, type ReportOrder } from '@/lib/pedidosya-report';
+import { saveProduct } from '@/db/catalog';
+import {
+  cleanProductName,
+  estimatePrices,
+  normalizeName,
+  orderIdFromRef,
+  parsePedidosYaReport,
+  splitPrices,
+  type ReportOrder,
+} from '@/lib/pedidosya-report';
 import { pushOutbox } from '@/sync/sync';
 
 const MAP_KEY = 'pya_product_map';
@@ -80,6 +90,34 @@ export default function ImportPedidosYaScreen() {
     } catch (e) {
       setMsg({ text: `No se pudo leer el archivo: ${e instanceof Error ? e.message : String(e)}` });
     }
+  }
+
+  async function createMissing() {
+    if (!orders) return;
+    setBusy(true);
+    setMsg(null);
+    const est = estimatePrices(orders);
+    const created: ProductMap = {};
+    const seen = new Set<string>();
+    try {
+      for (const name of unknownNames) {
+        const k = normalizeName(name);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const id = randomUUID();
+        const price = est[k] && est[k] > 0 ? est[k] : 100;
+        await saveProduct(db, ctx, { id, name: cleanProductName(name), price, price_pedidosya: price, category_id: null, itbis_rate: 0.18, active: true }, []);
+        created[k] = id;
+      }
+      setMap((m) => ({ ...m, ...created }));
+      await setSettings(db, { [MAP_KEY]: JSON.stringify({ ...fullMap, ...created }) });
+      setMsg({ text: `Se crearon ${Object.keys(created).length} productos. Revisa sus precios, fotos y recetas en Catálogo.`, ok: true });
+    } catch (e) {
+      setMap((m) => ({ ...m, ...created }));
+      setMsg({ text: `Se crearon ${Object.keys(created).length}, pero hubo un error: ${e instanceof Error ? e.message : String(e)}` });
+    }
+    setBusy(false);
+    reload();
   }
 
   async function runImport() {
@@ -156,6 +194,16 @@ export default function ImportPedidosYaScreen() {
                 <Label muted size={13}>
                   Estos nombres de PedidosYa no se parecen a ningún producto tuyo. Escoge cuál es, para que descuente su
                   receta del inventario. YOLI lo recuerda para la próxima vez.
+                </Label>
+                <Button
+                  icon="plus-box-multiple-outline"
+                  title={busy ? 'Creando…' : `Crear los ${unknownNames.length} productos que faltan`}
+                  onPress={createMissing}
+                  disabled={busy}
+                />
+                <Label muted size={12}>
+                  Se crean con el nombre de PedidosYa y un precio sacado del reporte (puedes cambiarlo). Después les pones
+                  foto y receta en Catálogo. O escoge uno por uno:
                 </Label>
                 {unknownNames.map((name) => (
                   <View key={name} style={{ gap: 6 }}>

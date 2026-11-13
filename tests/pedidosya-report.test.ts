@@ -49,3 +49,17 @@ test('reporte PedidosYa: reparte el total y el id no cambia', () => {
   assert.notEqual(orderIdFromRef('2362029511'), orderIdFromRef('2362029512'));
   assert.match(orderIdFromRef('x'), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
+
+test('reporte PedidosYa: estima precios para crear productos', async () => {
+  const { estimatePrices, cleanProductName } = await import('../src/lib/pedidosya-report.ts');
+  const o = (subtotal: number, items: [number, string][]) => ({
+    ref: String(subtotal), storeId: '', status: 'entregado' as const, statusText: '', createdAt: '', cash: false,
+    subtotal, discount: 0, net: 0, items: items.map(([quantity, name]) => ({ quantity, name })),
+  });
+  const est = estimatePrices([o(250, [[1, 'Mangu de platano']]), o(500, [[2, 'Mangu de platano']]), o(340, [[1, 'Mangu de platano'], [1, 'Jugo de chinola']]), o(610, [[2, 'Coca Cola'], [2, 'Mangu de platano']])]);
+  assert.equal(est['mangu de platano'], 250);
+  assert.equal(est['jugo de chinola'], 90);
+  assert.equal(est['coca cola'], 55);
+  assert.equal(cleanProductName('Kola Real [1 Rojo]'), 'Kola Real');
+  assert.equal(cleanProductName('tostada de  Jamon y queso'), 'Tostada de Jamon y queso');
+});
