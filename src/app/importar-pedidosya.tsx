@@ -2,11 +2,11 @@ import * as DocumentPicker from 'expo-document-picker';
 import { randomUUID } from 'expo-crypto';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useMemo, useState } from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import { Platform, Pressable, Switch, View } from 'react-native';
 
 import { Button, Card, Divider, Field, Icon, Label, Pill, Row, Screen, SectionTitle } from '@/components/ui';
 import { getSetting, setSettings } from '@/db/database';
-import { listProducts, recordImportedSale, type Product } from '@/db/repo';
+import { exemptImportedDeliverySales, listProducts, recordImportedSale, type Product } from '@/db/repo';
 import { useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD, priceFor } from '@/lib/calc';
@@ -22,6 +22,7 @@ import {
 } from '@/lib/pedidosya-report';
 import { pushOutbox } from '@/sync/sync';
 
+const EXEMPT_KEY = 'pya_itbis_exempt';
 const MAP_KEY = 'pya_product_map';
 /** '' = se importa sin producto (no descuenta inventario). */
 type ProductMap = Record<string, string>;
@@ -44,9 +45,14 @@ export default function ImportPedidosYaScreen() {
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok?: boolean } | null>(null);
+  const [exempt, setExempt] = useState<boolean | null>(null);
 
   const [data, reload] = useFocusData(async () => {
-    const [products, saved] = await Promise.all([listProducts(db), getSetting(db, MAP_KEY)]);
+    const [products, saved, exemptSetting] = await Promise.all([listProducts(db), getSetting(db, MAP_KEY), getSetting(db, EXEMPT_KEY)]);
+    const withItbis = await db.getFirstAsync<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM orders WHERE location_id = ? AND channel = 'pedidosya' AND payment_method = 'plataforma' AND external_ref IS NOT NULL AND itbis > 0",
+      [ctx.locationId],
+    );
     const imported = await db.getAllAsync<{ external_ref: string }>("SELECT external_ref FROM orders WHERE channel = 'pedidosya' AND external_ref IS NOT NULL");
     let savedMap: ProductMap = {};
     try {
@@ -54,8 +60,35 @@ export default function ImportPedidosYaScreen() {
     } catch {
       /* mapa dañado: se empieza de cero */
     }
-    return { products, savedMap, imported: new Set(imported.map((r) => r.external_ref)) };
-  }, [db]);
+    return {
+      products,
+      savedMap,
+      imported: new Set(imported.map((r) => r.external_ref)),
+      // Por defecto las ventas de PedidosYa entran sin ITBIS.
+      exempt: exemptSetting !== '0',
+      withItbis: withItbis?.n ?? 0,
+    };
+  }, [db, ctx.locationId]);
+  const itbisExempt = exempt ?? data?.exempt ?? true;
+
+  async function toggleExempt(v: boolean) {
+    setExempt(v);
+    await setSettings(db, { [EXEMPT_KEY]: v ? '1' : '0' });
+  }
+
+  async function fixOld() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const n = await exemptImportedDeliverySales(db, ctx, 'pedidosya');
+      await pushOutbox(db).catch(() => undefined);
+      setMsg({ text: `Listo: ${n} ventas de PedidosYa quedaron sin ITBIS (el total no cambia).`, ok: true });
+      reload();
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : String(e) });
+    }
+    setBusy(false);
+  }
 
   const products = data?.products ?? [];
   const byName = useMemo(() => new Map(products.map((p) => [normalizeName(p.name), p])), [products]);
@@ -106,7 +139,7 @@ export default function ImportPedidosYaScreen() {
         seen.add(k);
         const id = randomUUID();
         const price = est[k] && est[k] > 0 ? est[k] : 100;
-        await saveProduct(db, ctx, { id, name: cleanProductName(name), price, price_pedidosya: price, category_id: null, itbis_rate: 0.18, active: true }, []);
+        await saveProduct(db, ctx, { id, name: cleanProductName(name), price, price_pedidosya: price, category_id: null, itbis_rate: 0.18, delivery_itbis_exempt: itbisExempt, active: true }, []);
         created[k] = id;
       }
       setMap((m) => ({ ...m, ...created }));
@@ -140,6 +173,7 @@ export default function ImportPedidosYaScreen() {
           lines: lines.map((l, k) => ({ product: l.product, name: l.name, quantity: l.quantity, unitPrice: prices[k] })),
           discount: o.discount,
           netIncome: o.net,
+          itbisExempt,
         });
         if (saved) done++;
       }
@@ -165,6 +199,27 @@ export default function ImportPedidosYaScreen() {
           descuenta el inventario. Si subes el mismo archivo otra vez, no se repiten.
         </Label>
         <Button icon="file-upload-outline" title={orders ? 'Elegir otro archivo' : 'Elegir archivo del reporte'} onPress={pick} disabled={busy} />
+      </Card>
+
+      <Card style={{ gap: 8 }}>
+        <Row>
+          <Label style={{ flex: 1 }}>Ventas de PedidosYa sin ITBIS (exentas)</Label>
+          <Switch value={itbisExempt} onValueChange={toggleExempt} trackColor={{ true: t.primary, false: t.backgroundSelected }} thumbColor="#FFFFFF" />
+        </Row>
+        <Label muted size={12}>
+          {itbisExempt
+            ? 'Las ventas que importes entran con ITBIS en cero. El total y lo que te queda no cambian.'
+            : 'Las ventas que importes entran con el ITBIS de cada producto.'}
+        </Label>
+        {itbisExempt && data?.withItbis ? (
+          <Button
+            variant="secondary"
+            icon="receipt-text-remove-outline"
+            title={busy ? 'Arreglando…' : `Quitar el ITBIS a las ${data.withItbis} ventas ya importadas`}
+            onPress={fixOld}
+            disabled={busy}
+          />
+        ) : null}
       </Card>
 
       {orders ? (

@@ -1,8 +1,10 @@
 import { router } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { View } from 'react-native';
 
 import { Button, Card, EmptyState, Field, Label, Screen, SectionTitle } from '@/components/ui';
+import { setAllDeliveryItbisExempt } from '@/db/catalog';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/sync/supabase';
@@ -17,6 +19,24 @@ export default function PedidosYaScreen() {
   const [msg, setMsg] = useState<{ text: string; ok?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const manager = canManage(ctx);
+  const db = useSQLiteContext();
+  const [withItbis, reloadItbis] = useFocusData(
+    async () =>
+      (await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM products WHERE active = 1 AND itbis_rate > 0 AND COALESCE(delivery_itbis_exempt, 0) = 0'))?.n ?? 0,
+    [db],
+  );
+  const [itbisMsg, setItbisMsg] = useState<{ text: string; ok?: boolean } | null>(null);
+
+  async function exemptAll() {
+    setItbisMsg(null);
+    try {
+      await setAllDeliveryItbisExempt(db, ctx, true);
+      setItbisMsg({ text: 'Listo: todos tus productos se venden sin ITBIS en PedidosYa y Uber Eats. En el local siguen igual.', ok: true });
+      reloadItbis();
+    } catch (e) {
+      setItbisMsg({ text: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   const [data, reload] = useFocusData(async () => {
     if (!supabase) return { locations: [] as Loc[], links: {} as Record<string, string>, error: 'Sin nube' };
@@ -89,6 +109,21 @@ export default function PedidosYaScreen() {
         <Button icon="file-upload-outline" title="Importar ventas del reporte" onPress={() => router.push('/importar-pedidosya')} />
         <Button variant="secondary" icon="silverware-fork-knife" title="Traer mi menú (productos y fotos)" onPress={() => router.push('/importar-menu-pedidosya')} />
       </Card>
+
+      {manager ? (
+        <>
+          <SectionTitle icon="receipt-text-outline">ITBIS en delivery</SectionTitle>
+          <Card style={{ gap: 8 }}>
+            <Label muted size={13}>
+              {withItbis
+                ? `${withItbis} producto${withItbis === 1 ? '' : 's'} todavía cobra${withItbis === 1 ? '' : 'n'} ITBIS en PedidosYa y Uber Eats. Con este botón todos quedan exentos en delivery (en el local siguen con su ITBIS). Los productos nuevos los marcas en Catálogo.`
+                : 'Todos tus productos se venden sin ITBIS en PedidosYa y Uber Eats.'}
+            </Label>
+            {withItbis ? <Button variant="secondary" icon="check-all" title="Poner todos sin ITBIS en delivery" onPress={exemptAll} /> : null}
+            {itbisMsg ? <Label size={14} color={itbisMsg.ok ? t.success : t.danger}>{itbisMsg.text}</Label> : null}
+          </Card>
+        </>
+      ) : null}
 
       <SectionTitle icon="storefront-outline">Tus locales</SectionTitle>
       <Card style={{ gap: 12 }}>

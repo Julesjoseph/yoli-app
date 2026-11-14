@@ -96,6 +96,7 @@ export default function ImportMenuScreen() {
               price_pedidosya: price,
               category_id: categoryId,
               itbis_rate: 0.18,
+              delivery_itbis_exempt: true,
               active: true,
               image_url: photo ? await copyImageFromUrl(ctx, photo) : null,
             },
@@ -170,7 +171,7 @@ export default function ImportMenuScreen() {
               <Switch value={prices} onValueChange={setPrices} trackColor={{ true: t.primary, false: t.backgroundSelected }} thumbColor="#FFFFFF" />
             </Row>
             <Label muted size={12}>
-              Los productos nuevos se crean con el mismo precio en el local y en PedidosYa. Si en el local cobras otro,
+              Los productos nuevos se crean con el mismo precio en el local y en PedidosYa, y sin ITBIS en delivery. Si en el local cobras otro,
               cámbialo en Catálogo. Las fotos que ya tienes no se cambian.
             </Label>
           </Card>

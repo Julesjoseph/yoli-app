@@ -268,6 +268,8 @@ export async function recordImportedSale(
     discount: number;
     /** Lo que le queda al negocio después de comisiones y cargos. */
     netIncome: number;
+    /** Toda la venta sin ITBIS (exenta). */
+    itbisExempt?: boolean;
   },
 ): Promise<boolean> {
   const exists = await db.getFirstAsync<{ id: string }>(
@@ -276,7 +278,7 @@ export async function recordImportedSale(
   );
   if (exists) return false;
   const totals = computeOrderTotals(
-    input.lines.map((l) => ({ unitPrice: l.unitPrice, quantity: l.quantity, itbisRate: l.product ? itbisFor(l.product, input.channel) : 0.18 })),
+    input.lines.map((l) => ({ unitPrice: l.unitPrice, quantity: l.quantity, itbisRate: input.itbisExempt ? 0 : l.product ? itbisFor(l.product, input.channel) : 0.18 })),
     input.channel,
     { discount: input.discount, applyTipLaw: false },
   );
@@ -330,6 +332,28 @@ export async function recordImportedSale(
     }
   });
   return true;
+}
+
+/**
+ * Deja sin ITBIS las ventas que entraron desde un reporte de delivery (PedidosYa) en este local.
+ * El total no cambia: lo que era ITBIS pasa a ser parte del subtotal. Devuelve cuántas cambió.
+ */
+export async function exemptImportedDeliverySales(db: SQLiteDatabase, ctx: Context, channel: Channel): Promise<number> {
+  const rows = await db.getAllAsync<Record<string, unknown> & { id: string; subtotal: number; itbis: number }>(
+    `SELECT id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law, total,
+            platform_commission, net_income, payment_method, created_at, discount
+       FROM orders
+      WHERE location_id = ? AND channel = ? AND payment_method = 'plataforma' AND external_ref IS NOT NULL AND itbis > 0`,
+    [ctx.locationId, channel],
+  );
+  await db.withTransactionAsync(async () => {
+    for (const o of rows) {
+      const subtotal = round2(o.subtotal + o.itbis);
+      await db.runAsync('UPDATE orders SET subtotal = ?, itbis = 0 WHERE id = ?', [subtotal, o.id]);
+      await enqueue(db, 'orders', { ...o, subtotal, itbis: 0, discount: o.discount ?? 0 }, ctx);
+    }
+  });
+  return rows.length;
 }
 
 async function insertMovement(

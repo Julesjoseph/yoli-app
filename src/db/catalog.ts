@@ -394,3 +394,14 @@ export async function setProductPedidosYaPrice(db: SQLiteDatabase, ctx: Context,
   );
   await db.runAsync('UPDATE products SET price_pedidosya = ? WHERE id = ?', [price, productId]);
 }
+
+/** Todos los productos del negocio: sin ITBIS en PedidosYa / Uber Eats (o con ITBIS otra vez). */
+export async function setAllDeliveryItbisExempt(db: SQLiteDatabase, ctx: Context, exempt: boolean) {
+  await cloud(ctx, () =>
+    supabase!
+      .from('products')
+      .update({ delivery_itbis_exempt: exempt, updated_at: new Date().toISOString() })
+      .eq('business_id', ctx.businessId),
+  );
+  await db.runAsync('UPDATE products SET delivery_itbis_exempt = ? WHERE business_id = ?', [exempt ? 1 : 0, ctx.businessId]);
+}
