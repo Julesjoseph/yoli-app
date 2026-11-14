@@ -21,6 +21,11 @@ const PERIODS = [
   { value: '30d' as DashPeriod, label: '30 días' },
 ];
 
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const hour = (iso: string) =>
   new Date(iso).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
@@ -70,11 +75,21 @@ export default function AdminDashboard() {
     <Card style={{ gap: 12 }}>
       <Row>
         <Label bold size={16}>{period === 'hoy' ? 'Ventas por hora' : 'Ventas por día'}</Label>
-        <Label muted size={13}>{formatRD(d?.gross ?? 0)}</Label>
+        <Pressable onPress={() => router.push('/ventas')} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Label muted size={13}>{formatRD(d?.gross ?? 0)}</Label>
+          <Label size={13} bold color={t.primary}>Ver ventas</Label>
+          <Icon name="chevron-right" size={16} color={t.primary} />
+        </Pressable>
       </Row>
+      {period !== 'hoy' ? <Label muted size={12}>Toca un día para ver sus ventas.</Label> : null}
       <View style={styles.chart}>
         {(d?.series ?? []).map((s, i, all) => (
-          <View key={s.key} style={styles.barCol}>
+          <Pressable
+            key={s.key}
+            style={styles.barCol}
+            accessibilityRole="button"
+            accessibilityLabel={`Ventas del ${s.label}: ${formatRD(s.gross)}`}
+            onPress={() => router.push({ pathname: '/ventas', params: { dia: period === 'hoy' ? todayKey() : s.key } })}>
             <View style={styles.barTrack}>
               <View
                 style={{
@@ -87,7 +102,7 @@ export default function AdminDashboard() {
             <Text style={[styles.barLabel, { color: t.textSecondary }]}>
               {i % Math.ceil(all.length / (wide ? 12 : 6)) !== 0 ? '' : s.label}
             </Text>
-          </View>
+          </Pressable>
         ))}
       </View>
     </Card>

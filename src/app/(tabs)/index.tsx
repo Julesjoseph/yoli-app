@@ -123,6 +123,10 @@ export default function HomeScreen() {
         }>
         Últimas ventas
       </SectionTitle>
+      <Pressable onPress={() => router.push('/ventas')} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end', marginTop: -6 }}>
+        <Label size={14} bold color={t.primary}>Ver todas y filtrar</Label>
+        <Icon name="chevron-right" size={18} color={t.primary} />
+      </Pressable>
       <Card style={{ gap: 0 }}>
         {data && data.recent.length === 0 ? <EmptyState icon="cart-outline" text="Aún no hay ventas. ¡Haz la primera desde la Caja!" /> : null}
         {(data?.recent ?? []).map((o, i) => (
