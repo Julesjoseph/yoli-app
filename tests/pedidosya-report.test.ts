@@ -63,3 +63,19 @@ test('reporte PedidosYa: estima precios para crear productos', async () => {
   assert.equal(cleanProductName('Kola Real [1 Rojo]'), 'Kola Real');
   assert.equal(cleanProductName('tostada de  Jamon y queso'), 'Tostada de Jamon y queso');
 });
+
+test('pedidos sin "Ingreso estimado" (–): se estima con la mediana de los otros', async () => {
+  const { fillMissingNet } = await import('../src/lib/pedidosya-report.ts');
+  const base = { storeId: '1', statusText: 'Entregado', createdAt: '2026-11-13T00:00:00Z', cash: false, discount: 0, items: [] };
+  const orders = [
+    { ...base, ref: 'a', status: 'entregado' as const, subtotal: 100, net: 70, netKnown: true },
+    { ...base, ref: 'b', status: 'entregado' as const, subtotal: 200, net: 150, netKnown: true },
+    { ...base, ref: 'c', status: 'entregado' as const, subtotal: 300, net: 216, netKnown: true },
+    { ...base, ref: 'd', status: 'entregado' as const, subtotal: 1000, net: 0, netKnown: false },
+  ];
+  const out = fillMissingNet(orders, 0.25);
+  assert.equal(out[3].net, 720); // mediana 0.72
+  assert.equal(out[0].net, 70);
+  // Sin otros pedidos con dato: usa la comisión configurada.
+  assert.equal(fillMissingNet([orders[3]], 0.25)[0].net, 750);
+});

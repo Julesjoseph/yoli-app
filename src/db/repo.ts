@@ -356,6 +356,23 @@ export async function exemptImportedDeliverySales(db: SQLiteDatabase, ctx: Conte
   return rows.length;
 }
 
+/** Corrige lo que te quedó de una venta importada (cuando PedidosYa ya lo calculó). */
+export async function updateImportedNet(db: SQLiteDatabase, ctx: Context, orderId: string, netIncome: number) {
+  const o = await db.getFirstAsync<Record<string, unknown> & { total: number }>(
+    `SELECT id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law, total,
+            platform_commission, net_income, payment_method, created_at, discount
+       FROM orders WHERE id = ?`,
+    [orderId],
+  );
+  if (!o) return;
+  const net = round2(netIncome);
+  const commission = round2(o.total - net);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE orders SET net_income = ?, platform_commission = ? WHERE id = ?', [net, commission, orderId]);
+    await enqueue(db, 'orders', { ...o, net_income: net, platform_commission: commission, discount: o.discount ?? 0 }, ctx);
+  });
+}
+
 async function insertMovement(
   db: SQLiteDatabase,
   ctx: Context,

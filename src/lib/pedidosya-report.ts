@@ -24,6 +24,8 @@ export interface ReportOrder {
   discount: number;
   /** Lo que le queda al negocio según PedidosYa (Ingreso estimado). */
   net: number;
+  /** false si PedidosYa todavía no lo calculó (sale "–" en el portal). */
+  netKnown: boolean;
   items: ReportItem[];
 }
 
@@ -163,6 +165,7 @@ export function parsePedidosYaReport(text: string): { orders: ReportOrder[]; err
       subtotal: parseAmount(get(r, c.subtotal)),
       discount: parseAmount(get(r, c.discount)) + parseAmount(get(r, c.voucher)),
       net: parseAmount(get(r, c.net)),
+      netKnown: /\d/.test(get(r, c.net) ?? ''),
       items: parseItems(get(r, c.items)),
     };
   });
@@ -251,4 +254,21 @@ export function estimatePrices(orders: ReportOrder[], known: Record<string, numb
   }
   for (const k of Object.keys(est)) est[k] = Math.round(est[k] / 5) * 5 || Math.round(est[k] * 100) / 100;
   return est;
+}
+
+/**
+ * Los pedidos más nuevos salen sin "Ingreso estimado" (PedidosYa lo calcula después).
+ * A esos se les estima lo que te queda con lo que PedidosYa te dejó en los otros pedidos
+ * del mismo reporte (la mediana), o con tu % de comisión si no hay con qué comparar.
+ */
+export function fillMissingNet(orders: ReportOrder[], commissionRate: number): ReportOrder[] {
+  const ratios = orders
+    .filter((o) => o.status === 'entregado' && o.netKnown && o.net > 0 && o.subtotal - o.discount > 0)
+    .map((o) => o.net / (o.subtotal - o.discount))
+    .sort((a, b) => a - b);
+  const median = ratios.length ? ratios[Math.floor(ratios.length / 2)] : null;
+  const ratio = median ?? Math.min(1, Math.max(0, 1 - commissionRate));
+  return orders.map((o) =>
+    o.netKnown ? o : { ...o, net: Math.round((o.subtotal - o.discount) * ratio * 100) / 100 },
+  );
 }

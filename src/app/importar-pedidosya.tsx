@@ -6,7 +6,7 @@ import { Platform, Pressable, Switch, View } from 'react-native';
 
 import { Button, Card, Divider, Field, Icon, Label, Pill, Row, Screen, SectionTitle } from '@/components/ui';
 import { getSetting, setSettings } from '@/db/database';
-import { exemptImportedDeliverySales, listProducts, recordImportedSale, type Product } from '@/db/repo';
+import { exemptImportedDeliverySales, getCommissionRates, listProducts, recordImportedSale, updateImportedNet, type Product } from '@/db/repo';
 import { useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD, priceFor } from '@/lib/calc';
@@ -14,6 +14,7 @@ import { saveProduct } from '@/db/catalog';
 import {
   cleanProductName,
   estimatePrices,
+  fillMissingNet,
   normalizeName,
   orderIdFromRef,
   parsePedidosYaReport,
@@ -53,7 +54,10 @@ export default function ImportPedidosYaScreen() {
       "SELECT COUNT(*) AS n FROM orders WHERE location_id = ? AND channel = 'pedidosya' AND payment_method = 'plataforma' AND external_ref IS NOT NULL AND itbis > 0",
       [ctx.locationId],
     );
-    const imported = await db.getAllAsync<{ external_ref: string }>("SELECT external_ref FROM orders WHERE channel = 'pedidosya' AND external_ref IS NOT NULL");
+    const imported = await db.getAllAsync<{ external_ref: string; id: string; net_income: number }>(
+      "SELECT external_ref, id, net_income FROM orders WHERE channel = 'pedidosya' AND external_ref IS NOT NULL",
+    );
+    const rates = await getCommissionRates(db, ctx.businessId);
     let savedMap: ProductMap = {};
     try {
       savedMap = saved ? (JSON.parse(saved) as ProductMap) : {};
@@ -64,6 +68,8 @@ export default function ImportPedidosYaScreen() {
       products,
       savedMap,
       imported: new Set(imported.map((r) => r.external_ref)),
+      importedRows: new Map(imported.map((r) => [r.external_ref, r])),
+      rate: rates.pedidosya ?? 0.25,
       // Por defecto las ventas de PedidosYa entran sin ITBIS.
       exempt: exemptSetting !== '0',
       withItbis: withItbis?.n ?? 0,
@@ -99,7 +105,17 @@ export default function ImportPedidosYaScreen() {
     return byName.get(k);
   };
 
-  const delivered = (orders ?? []).filter((o) => o.status === 'entregado');
+  // Los pedidos que PedidosYa todavía no calculó ("–") llevan lo que te queda estimado.
+  const withNet = orders ? fillMissingNet(orders, data?.rate ?? 0.25) : null;
+  const delivered = (withNet ?? []).filter((o) => o.status === 'entregado');
+  const estimated = delivered.filter((o) => !o.netKnown && !data?.imported.has(o.ref)).length;
+  // Ya importados cuyo "te queda" cambió: PedidosYa ya lo calculó, o se habían importado en cero.
+  const toUpdate = delivered.filter((o) => {
+    const row = data?.importedRows.get(o.ref);
+    if (!row) return false;
+    if (o.netKnown) return Math.abs(row.net_income - o.net) > 0.009;
+    return Math.abs(row.net_income) < 0.01 && o.net > 0;
+  });
   const fresh = delivered.filter((o) => !data?.imported.has(o.ref));
   const cancelled = (orders ?? []).filter((o) => o.status === 'cancelado').length;
   const unknownNames = [...new Set(fresh.flatMap((o) => o.items.map((i) => i.name)))].filter((n) => productFor(n) === undefined);
@@ -177,10 +193,20 @@ export default function ImportPedidosYaScreen() {
         });
         if (saved) done++;
       }
+      let updated = 0;
+      for (const o of toUpdate) {
+        const row = data?.importedRows.get(o.ref);
+        if (!row) continue;
+        await updateImportedNet(db, ctx, row.id, o.net);
+        updated++;
+      }
       await pushOutbox(db).catch(() => undefined);
       setOrders(null);
       setMap({});
-      setMsg({ text: `Listo: ${done} ventas de PedidosYa importadas en ${ctx.locationName}.`, ok: true });
+      setMsg({
+        text: `Listo: ${done} ventas de PedidosYa importadas en ${ctx.locationName}${updated ? ` y ${updated} actualizadas con lo que te queda` : ''}.`,
+        ok: true,
+      });
       reload();
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : String(e) });
@@ -231,9 +257,18 @@ export default function ImportPedidosYaScreen() {
               <Row><Label muted>Ya estaban en YOLI</Label><Label muted>{delivered.length - fresh.length}</Label></Row>
             ) : null}
             {cancelled ? <Row><Label muted>Cancelados (no se importan)</Label><Label muted>{cancelled}</Label></Row> : null}
+            {toUpdate.length ? (
+              <Row><Label muted>Ya importados que se corrigen</Label><Label muted>{toUpdate.length}</Label></Row>
+            ) : null}
             <Divider />
             <Row><Label>Ventas</Label><Label bold>{formatRD(sales)}</Label></Row>
             <Row><Label>Te queda (según PedidosYa)</Label><Label bold color={t.success}>{formatRD(net)}</Label></Row>
+            {estimated ? (
+              <Label size={13} muted>
+                {estimated} pedido{estimated === 1 ? '' : 's'} todavía no tiene{estimated === 1 ? '' : 'n'} "Ingreso estimado" en PedidosYa ("–").
+                Se calcula parecido a tus otros pedidos. Cuando lo tengan, sube el reporte otra vez y se corrige solo.
+              </Label>
+            ) : null}
             {negative.length ? (
               <Label size={13} color={t.danger}>
                 Ojo: {negative.length === 1 ? 'el pedido' : 'los pedidos'} {negative.map((o) => o.ref).join(', ')} {negative.length === 1 ? 'tiene' : 'tienen'} ingreso
@@ -302,9 +337,17 @@ export default function ImportPedidosYaScreen() {
           <Button
             size="lg"
             icon="database-import-outline"
-            title={busy ? 'Importando…' : unknownNames.length ? `Enlaza ${unknownNames.length} producto(s) para seguir` : `Importar ${fresh.length} ventas`}
+            title={
+              busy
+                ? 'Importando…'
+                : unknownNames.length
+                  ? `Enlaza ${unknownNames.length} producto(s) para seguir`
+                  : fresh.length
+                    ? `Importar ${fresh.length} ventas${toUpdate.length ? ` y corregir ${toUpdate.length}` : ''}`
+                    : `Corregir ${toUpdate.length} ventas`
+            }
             onPress={runImport}
-            disabled={busy || !fresh.length || unknownNames.length > 0}
+            disabled={busy || (!fresh.length && !toUpdate.length) || unknownNames.length > 0}
           />
           {!fresh.length ? <Pill text="NADA NUEVO EN ESTE ARCHIVO" color={t.info} /> : null}
         </>
