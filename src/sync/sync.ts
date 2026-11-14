@@ -38,7 +38,9 @@ export async function pushOutbox(db: SQLiteDatabase): Promise<SyncResult> {
   for (const table of TABLE_ORDER) {
     const group = rows.filter((r) => r.table_name === table);
     if (group.length === 0) continue;
-    const { error } = await supabase.from(table).upsert(group.map((r) => JSON.parse(r.payload)));
+    // Si una fila trae una columna y otra no (p. ej. "discount" solo cuando hay descuento),
+    // la que no la trae usa el valor por defecto de la nube en vez de null.
+    const { error } = await supabase.from(table).upsert(group.map((r) => JSON.parse(r.payload)), { defaultToNull: false });
     if (error) {
       await db.runAsync(
         `UPDATE outbox SET attempts = attempts + 1, last_error = ? WHERE seq IN (${group.map(() => '?').join(',')})`,
