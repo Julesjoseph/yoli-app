@@ -165,7 +165,8 @@ export function parsePedidosYaReport(text: string): { orders: ReportOrder[]; err
       subtotal: parseAmount(get(r, c.subtotal)),
       discount: parseAmount(get(r, c.discount)) + parseAmount(get(r, c.voucher)),
       net: parseAmount(get(r, c.net)),
-      netKnown: /\d/.test(get(r, c.net) ?? ''),
+      // En el CSV los que PedidosYa no ha calculado vienen vacíos, con "–" o en 0.
+      netKnown: /\d/.test(get(r, c.net) ?? '') && parseAmount(get(r, c.net)) !== 0,
       items: parseItems(get(r, c.items)),
     };
   });
