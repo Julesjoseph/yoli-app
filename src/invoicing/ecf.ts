@@ -18,6 +18,7 @@ export const ECF_LABELS: Record<string, string> = {
 export const PROVIDERS = [
   { value: 'prueba', label: 'Modo prueba', ready: true },
   { value: 'alanube', label: 'Alanube', ready: true },
+  { value: 'api', label: 'Otro proveedor por API', ready: true },
   { value: 'manual', label: 'Otro proveedor (manual)', ready: true },
 ] as const;
 
@@ -33,8 +34,26 @@ export interface EinvoiceSettings {
   seq31_due: string | null;
   /** Id de la compañía en Alanube (solo si es una compañía asociada). */
   provider_company_id: string | null;
-  /** Nombre del proveedor cuando la factura se registra a mano. */
+  /** Nombre del proveedor (manual o por API). */
   provider_name: string | null;
+  /** Conector genérico por API (0015). */
+  api_url: string | null;
+  api_status_url: string | null;
+  api_auth_header: string | null;
+  api_auth_prefix: string | null;
+  api_format: 'yoli' | 'alanube' | null;
+  api_numbering: 'yoli' | 'proveedor' | null;
+  api_response_map: ApiResponseMap | null;
+}
+
+/** Dónde está cada dato en la respuesta del proveedor (rutas tipo "data.encf"). Vacío = se busca solo. */
+export interface ApiResponseMap {
+  id?: string;
+  encf?: string;
+  securityCode?: string;
+  qrUrl?: string;
+  status?: string;
+  message?: string;
 }
 
 export interface Invoice {
@@ -64,6 +83,13 @@ const DEFAULTS: EinvoiceSettings = {
   seq31_due: null,
   provider_company_id: null,
   provider_name: null,
+  api_url: null,
+  api_status_url: null,
+  api_auth_header: null,
+  api_auth_prefix: null,
+  api_format: null,
+  api_numbering: null,
+  api_response_map: null,
 };
 
 function friendly(message: string) {
@@ -91,8 +117,13 @@ export async function saveEinvoiceSettings(businessId: string, s: EinvoiceSettin
   for (const k of ['seq32_next', 'seq32_due', 'seq31_next', 'seq31_due', 'provider_company_id', 'provider_name']) {
     if (row[k] === null || row[k] === undefined || row[k] === '') delete row[k];
   }
+  // Las columnas del conector por API solo se envían si se usa (así funciona aunque falte 0015).
+  if (s.provider !== 'api') {
+    for (const k of Object.keys(row)) if (k.startsWith('api_') && (row[k] === null || row[k] === undefined)) delete row[k];
+  }
   const { error } = await supabase.from('einvoice_settings').upsert(row);
   if (error) {
+    if (/api_/i.test(error.message)) return 'Falta un paso en Supabase: corre el archivo 0015_ecf_api.sql.';
     if (/provider_name/i.test(error.message)) return 'Falta un paso en Supabase: corre el archivo 0014_ecf_manual.sql.';
     if (/seq3|provider_company_id/i.test(error.message)) return 'Falta un paso en Supabase: corre el archivo 0013_secuencias_ecf.sql.';
     return /row-level|permission/i.test(error.message) ? 'Solo el dueño puede cambiar esto.' : friendly(error.message);

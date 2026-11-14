@@ -7,7 +7,7 @@ import { Button, Card, Chips, EmptyState, Field, Icon, Label, Pill, Row, Screen,
 import { getLocalProfile } from '@/db/business-profile';
 import { useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { getEinvoiceSettings, PROVIDERS, saveEinvoiceSettings, type EcfType, type EinvoiceSettings } from '@/invoicing/ecf';
+import { getEinvoiceSettings, PROVIDERS, saveEinvoiceSettings, type ApiResponseMap, type EcfType, type EinvoiceSettings } from '@/invoicing/ecf';
 
 /** Configuración de la factura electrónica (e-CF) del negocio. Solo el dueño la cambia. */
 export default function EinvoiceSettingsScreen() {
@@ -17,6 +17,7 @@ export default function EinvoiceSettingsScreen() {
   const owner = ctx.role === 'dueno';
   const [form, setForm] = useState<EinvoiceSettings | null>(null);
   const [token, setToken] = useState('');
+  const [advanced, setAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok?: boolean } | null>(null);
 
@@ -38,12 +39,31 @@ export default function EinvoiceSettingsScreen() {
     if (s) setForm({ ...s, ...patch });
   };
   const provider = PROVIDERS.find((p) => p.value === s?.provider);
+  const isApi = s?.provider === 'api';
+  const usesToken = s?.provider === 'alanube' || isApi;
+  const usesSequences = s?.provider === 'alanube' || (isApi && s?.api_numbering !== 'proveedor');
+  const map = s?.api_response_map ?? {};
+  const setMap = (patch: Partial<ApiResponseMap>) => {
+    const next = { ...map, ...patch };
+    for (const k of Object.keys(next) as (keyof ApiResponseMap)[]) if (!next[k]?.trim()) delete next[k];
+    set({ api_response_map: Object.keys(next).length ? next : null });
+  };
   const hasRnc = !!data?.rnc.replace(/\D/g, '');
 
   async function save() {
     if (!s) return;
     for (const d of [s.seq32_due, s.seq31_due]) {
       if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return setMsg({ text: 'La fecha de vencimiento va así: 2027-12-31.' });
+    }
+    if (s.provider === 'api' && s.enabled) {
+      if (!s.provider_name?.trim()) return setMsg({ text: 'Escribe el nombre de tu proveedor.' });
+      if (!/^https:\/\/\S+$/i.test(s.api_url?.trim() ?? '')) return setMsg({ text: 'La dirección para emitir tiene que empezar con https://' });
+      if (s.api_status_url?.trim() && !/^https:\/\/\S+$/i.test(s.api_status_url.trim())) {
+        return setMsg({ text: 'La dirección para consultar tiene que empezar con https:// (o déjala vacía).' });
+      }
+      if (s.api_numbering !== 'proveedor' && !s.seq32_next && !s.seq31_next) {
+        return setMsg({ text: 'Pon al menos una secuencia e-NCF, o elige que el proveedor ponga el número.' });
+      }
     }
     if (s.enabled && s.provider === 'manual' && !s.provider_name?.trim()) {
       return setMsg({ text: 'Escribe el nombre de tu proveedor.' });
@@ -110,7 +130,11 @@ export default function EinvoiceSettingsScreen() {
               value={s.provider}
               onChange={(v) => {
                 if (owner && PROVIDERS.find((p) => p.value === v)?.ready) {
-                  set({ provider: v, environment: v === 'prueba' ? 'prueba' : v === 'manual' ? 'produccion' : s.environment });
+                  set({
+                    provider: v,
+                    environment: v === 'prueba' ? 'prueba' : v === 'manual' ? 'produccion' : s.environment,
+                    ...(v === 'api' ? { api_format: s.api_format ?? 'yoli', api_numbering: s.api_numbering ?? 'yoli' } : {}),
+                  });
                 }
               }}
             />
@@ -136,7 +160,68 @@ export default function EinvoiceSettingsScreen() {
               </>
             ) : null}
 
-            {provider && s.provider === 'alanube' ? (
+            {isApi ? (
+              <>
+                <Label muted size={13}>
+                  Para conectar cualquier proveedor autorizado por la DGII que tenga API. YOLI SOFT le manda cada factura
+                  y guarda el e-NCF, el código de seguridad y el QR que devuelve. Pídele a tu proveedor la dirección de su
+                  API y la llave, y pásale la guía de YOLI (docs/factura-electronica-api.md).
+                </Label>
+                <Field
+                  label="Nombre de tu proveedor"
+                  icon="domain"
+                  value={s.provider_name ?? ''}
+                  onChangeText={(v) => set({ provider_name: v || null })}
+                  editable={owner}
+                  placeholder="Ej. el nombre de la empresa"
+                />
+                <Field
+                  label="Dirección para emitir (POST)"
+                  icon="web"
+                  value={s.api_url ?? ''}
+                  onChangeText={(v) => set({ api_url: v.trim() || null })}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  editable={owner}
+                  placeholder="https://api.tuproveedor.com/ecf"
+                />
+                <Field
+                  label="Dirección para consultar el estado (opcional, GET)"
+                  icon="web-refresh"
+                  value={s.api_status_url ?? ''}
+                  onChangeText={(v) => set({ api_status_url: v.trim() || null })}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  editable={owner}
+                  placeholder="https://api.tuproveedor.com/ecf/{id}"
+                />
+                <Label muted size={12}>En la de consultar, {'{id}'} se cambia por el id que dio el proveedor y {'{encf}'} por el e-NCF.</Label>
+                <Label muted size={13}>Formato de la factura</Label>
+                <Chips
+                  options={[
+                    { value: 'yoli', label: 'Estándar YOLI (recomendado)' },
+                    { value: 'alanube', label: 'Igual que Alanube' },
+                  ]}
+                  value={s.api_format ?? 'yoli'}
+                  onChange={(v) => {
+                    if (owner) set({ api_format: v as 'yoli' | 'alanube' });
+                  }}
+                />
+                <Label muted size={13}>¿Quién pone el número e-NCF?</Label>
+                <Chips
+                  options={[
+                    { value: 'yoli', label: 'YOLI lleva la secuencia' },
+                    { value: 'proveedor', label: 'El proveedor lo pone' },
+                  ]}
+                  value={s.api_numbering ?? 'yoli'}
+                  onChange={(v) => {
+                    if (owner) set({ api_numbering: v as 'yoli' | 'proveedor' });
+                  }}
+                />
+              </>
+            ) : null}
+
+            {provider && usesToken ? (
               <>
                 <Label muted size={13}>Ambiente</Label>
                 <Chips
@@ -160,6 +245,77 @@ export default function EinvoiceSettingsScreen() {
                   placeholder={data?.tokenSaved ? '•••••••• (escribe para cambiarla)' : 'Pégala aquí'}
                 />
                 <Label muted size={13}>La llave se guarda en el servidor y nadie la puede volver a ver desde la app.</Label>
+                {isApi ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={advanced ? 'chevron-up' : 'chevron-down'}
+                      title={advanced ? 'Ocultar opciones avanzadas' : 'Opciones avanzadas (encabezado y respuesta)'}
+                      onPress={() => setAdvanced(!advanced)}
+                    />
+                    {advanced ? (
+                      <View style={{ gap: 10 }}>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                          <View style={{ flex: 1 }}>
+                            <Field
+                              label="Encabezado de la llave"
+                              value={s.api_auth_header ?? ''}
+                              onChangeText={(v) => set({ api_auth_header: v.trim() || null })}
+                              autoCapitalize="none"
+                              editable={owner}
+                              placeholder="Authorization"
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Field
+                              label="Antes de la llave"
+                              value={s.api_auth_prefix ?? ''}
+                              onChangeText={(v) => set({ api_auth_prefix: v || null })}
+                              autoCapitalize="none"
+                              editable={owner}
+                              placeholder="Bearer (con espacio)"
+                            />
+                          </View>
+                        </View>
+                        <Label muted size={12}>
+                          Por defecto se manda "Authorization: Bearer tu-llave". Si tu proveedor usa otro (por ejemplo
+                          "x-api-key"), escríbelo aquí y deja "Antes de la llave" con un espacio o vacío.
+                        </Label>
+                        <Label bold size={14}>Dónde viene cada dato en la respuesta</Label>
+                        <Label muted size={12}>
+                          Déjalo vacío y YOLI lo busca solo (encf, codigoSeguridad, qrUrl, estado…). Si tu proveedor usa
+                          otros nombres, escribe la ruta, por ejemplo data.documento.encf.
+                        </Label>
+                        {(
+                          [
+                            ['encf', 'e-NCF'],
+                            ['securityCode', 'Código de seguridad'],
+                            ['qrUrl', 'Enlace del QR'],
+                            ['status', 'Estado'],
+                            ['id', 'Id del documento'],
+                            ['message', 'Mensaje'],
+                          ] as [keyof ApiResponseMap, string][]
+                        ).map(([k, label]) => (
+                          <Field
+                            key={k}
+                            label={label}
+                            value={map[k] ?? ''}
+                            onChangeText={(v) => setMap({ [k]: v })}
+                            autoCapitalize="none"
+                            editable={owner}
+                            placeholder="(automático)"
+                          />
+                        ))}
+                      </View>
+                    ) : null}
+                  </>
+                ) : null}
+              </>
+            ) : null}
+
+            {s.provider === 'alanube' ? (
+              <>
                 <Field
                   label="Id de la compañía en Alanube (opcional)"
                   icon="domain"
@@ -169,6 +325,11 @@ export default function EinvoiceSettingsScreen() {
                   editable={owner}
                   placeholder="Solo si Alanube te la dio (compañía asociada)"
                 />
+              </>
+            ) : null}
+
+            {usesSequences ? (
+              <>
 
                 <Label bold size={15}>Secuencias e-NCF autorizadas por la DGII</Label>
                 <Label muted size={13}>

@@ -1,5 +1,6 @@
 // YOLI SOFT · Emite la factura electrónica (e-CF) de una venta con el proveedor
-// autorizado por la DGII que configuró el negocio (Alanube), o en modo prueba.
+// autorizado por la DGII que configuró el negocio: Alanube, cualquier otro proveedor
+// con API (conector genérico, ver docs/factura-electronica-api.md), o en modo prueba.
 //
 // La app llama:  supabase.functions.invoke('emitir-ecf', { body: { order_id, type, customer } })
 //           o:   supabase.functions.invoke('emitir-ecf', { body: { action: 'status', invoice_id } })
@@ -10,6 +11,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 import { ALANUBE_PATH, ALANUBE_URL, alanubeError, buildAlanubePayload, readAlanubeResponse, type EcfInput } from './alanube.ts';
+import { buildYoliPayload, fillUrl, genericError, readGenericResponse, validApiUrl, type ResponseMap } from './generico.ts';
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false },
@@ -26,11 +28,12 @@ const reply = (body: unknown, status = 200) =>
 /** Fecha de hoy en República Dominicana (AAAA-MM-DD). */
 const todayRD = () => new Date(Date.now() - 4 * 3600_000).toISOString().slice(0, 10);
 
-async function callAlanube(method: 'GET' | 'POST', url: string, token: string, body?: unknown) {
+async function callApi(method: 'GET' | 'POST', url: string, headers: Record<string, string>, body?: unknown) {
   const res = await fetch(url, {
     method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { ...headers, 'Content-Type': 'application/json', Accept: 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(45_000),
   });
   const text = await res.text();
   let json: any = {};
@@ -41,6 +44,17 @@ async function callAlanube(method: 'GET' | 'POST', url: string, token: string, b
   }
   return { ok: res.ok, status: res.status, json };
 }
+const callAlanube = (method: 'GET' | 'POST', url: string, token: string, body?: unknown) =>
+  callApi(method, url, { Authorization: `Bearer ${token}` }, body);
+
+/** Encabezado de la llave para el conector genérico (por defecto "Authorization: Bearer <llave>"). */
+function apiHeaders(settings: Record<string, any>, token: string | null | undefined): Record<string, string> {
+  if (!token) return {};
+  const header = String(settings.api_auth_header ?? '').trim() || 'Authorization';
+  const prefix = settings.api_auth_prefix ?? 'Bearer ';
+  return { [header]: `${prefix}${token}` };
+}
+const providerName = (settings: Record<string, any>) => String(settings.provider_name ?? '').trim() || 'El proveedor';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -66,8 +80,30 @@ Deno.serve(async (req) => {
     const { data: inv } = await admin.from('invoices').select('*').eq('id', body.invoice_id ?? '').maybeSingle();
     if (!inv || !(await isMember(inv.business_id))) return reply({ error: 'No se encontró la factura.' }, 404);
     const providerId = inv.provider_response?.id;
-    if (inv.provider !== 'alanube' || !providerId) return reply({ invoice: inv });
     const { data: secret } = await admin.from('einvoice_secrets').select('api_token').eq('business_id', inv.business_id).maybeSingle();
+    if (inv.provider === 'api') {
+      const { data: st } = await admin.from('einvoice_settings').select('*').eq('business_id', inv.business_id).maybeSingle();
+      const template = String(st?.api_status_url ?? '').trim();
+      if (!st || !template || validApiUrl(template) || (!providerId && !inv.encf)) return reply({ invoice: inv });
+      const r = await callApi('GET', fillUrl(template, { id: providerId, encf: inv.encf }), apiHeaders(st, secret?.api_token));
+      if (!r.ok) return reply({ error: genericError(r.status, r.json, providerName(st)) }, 502);
+      const res = readGenericResponse(r.json, (st.api_response_map ?? {}) as ResponseMap);
+      const { data: saved } = await admin
+        .from('invoices')
+        .update({
+          status: res.status,
+          encf: inv.encf ?? res.encf ?? null,
+          security_code: res.securityCode ?? inv.security_code,
+          qr_url: res.qrUrl ?? inv.qr_url,
+          message: res.message ?? inv.message,
+          provider_response: { ...(r.json as object), id: providerId ?? res.providerId },
+        })
+        .eq('id', inv.id)
+        .select()
+        .single();
+      return reply({ invoice: saved });
+    }
+    if (inv.provider !== 'alanube' || !providerId) return reply({ invoice: inv });
     const env = inv.environment === 'produccion' ? 'produccion' : 'prueba';
     const r = await callAlanube('GET', `${ALANUBE_URL[env]}/${ALANUBE_PATH[inv.ecf_type]}/${providerId}?pdfType=pos`, secret?.api_token ?? '');
     if (!r.ok) return reply({ error: alanubeError(r.status, r.json) }, 502);
@@ -100,7 +136,7 @@ Deno.serve(async (req) => {
 
   const { data: settings } = await admin.from('einvoice_settings').select('*').eq('business_id', b).maybeSingle();
   if (!settings?.enabled) return reply({ error: 'La factura electrónica no está activada. Actívala en Perfil › Factura electrónica.' }, 400);
-  if (!['prueba', 'alanube'].includes(settings.provider)) {
+  if (!['prueba', 'alanube', 'api'].includes(settings.provider)) {
     return reply({ error: `El proveedor "${settings.provider}" aún no está conectado en YOLI SOFT.` }, 400);
   }
 
@@ -109,7 +145,11 @@ Deno.serve(async (req) => {
   if (issuerRnc.length !== 9 && issuerRnc.length !== 11) {
     return reply({ error: 'Pon el RNC del negocio en Perfil › Perfil del negocio.' }, 400);
   }
-  if (settings.provider === 'alanube' && !String(biz.address ?? '').trim()) {
+  if (settings.provider === 'api') {
+    const bad = validApiUrl(settings.api_url);
+    if (bad) return reply({ error: `${bad} Revísala en Perfil › Factura electrónica.` }, 400);
+  }
+  if (settings.provider !== 'prueba' && !String(biz.address ?? '').trim()) {
     return reply({ error: 'Pon la dirección del negocio en Perfil › Perfil del negocio (la DGII la pide).' }, 400);
   }
   let customer: EcfInput['customer'];
@@ -136,10 +176,13 @@ Deno.serve(async (req) => {
     return delivery && p.delivery_itbis_exempt ? 0 : Number(p.itbis_rate);
   };
 
-  // 4. Número e-NCF.
+  // 4. Número e-NCF (YOLI lleva la secuencia, salvo que el proveedor ponga el número).
   let encf: string;
   let sequenceDue: string | null = null;
-  if (settings.provider === 'prueba') {
+  const providerNumbers = settings.provider === 'api' && settings.api_numbering === 'proveedor';
+  if (providerNumbers) {
+    encf = '';
+  } else if (settings.provider === 'prueba') {
     const { count } = await admin
       .from('invoices').select('id', { count: 'exact', head: true })
       .eq('business_id', b).eq('ecf_type', type).eq('provider', 'prueba');
@@ -188,30 +231,46 @@ Deno.serve(async (req) => {
     };
     raw = { payload: buildAlanubePayload(input) };
   } else {
+    const isApi = settings.provider === 'api';
+    const name = isApi ? providerName(settings) : 'Alanube';
     const { data: secret } = await admin.from('einvoice_secrets').select('api_token').eq('business_id', b).maybeSingle();
-    if (!secret?.api_token) return reply({ error: 'Falta la llave de Alanube. Ponla en Perfil › Factura electrónica.' }, 400);
+    if (!isApi && !secret?.api_token) return reply({ error: 'Falta la llave de Alanube. Ponla en Perfil › Factura electrónica.' }, 400);
     const env = settings.environment === 'produccion' ? 'produccion' : 'prueba';
+    const payload = isApi
+      ? settings.api_format === 'alanube'
+        ? buildAlanubePayload(input)
+        : buildYoliPayload(input, { saleId: order.id, environment: env })
+      : buildAlanubePayload(input);
+    const url = isApi ? String(settings.api_url).trim() : `${ALANUBE_URL[env]}/${ALANUBE_PATH[type]}`;
+    const headers = isApi ? apiHeaders(settings, secret?.api_token) : { Authorization: `Bearer ${secret!.api_token}` };
+    const giveBack = async () => {
+      if (!providerNumbers) await admin.rpc('release_encf', { p_business: b, p_type: type, p_encf: encf });
+    };
     let r;
     try {
-      r = await callAlanube('POST', `${ALANUBE_URL[env]}/${ALANUBE_PATH[type]}`, secret.api_token, buildAlanubePayload(input));
+      r = await callApi('POST', url, headers, payload);
     } catch (e) {
-      await admin.rpc('release_encf', { p_business: b, p_type: type, p_encf: encf });
-      return reply({ error: `Alanube no respondió: ${e instanceof Error ? e.message : String(e)}` }, 502);
+      await giveBack();
+      return reply({ error: `${name} no respondió: ${e instanceof Error ? e.message : String(e)}` }, 502);
     }
+    const errorText = () => (isApi ? genericError(r.status, r.json, name) : alanubeError(r.status, r.json));
     if (!r.ok) {
       // No llegó a la DGII: el número se devuelve para no dejar huecos.
-      await admin.rpc('release_encf', { p_business: b, p_type: type, p_encf: encf });
+      await giveBack();
       await admin.from('invoices').insert({
-        business_id: b, order_id: order.id, ecf_type: type, encf, provider: 'alanube', status: 'rechazada',
+        business_id: b, order_id: order.id, ecf_type: type, encf: encf || null, provider: settings.provider, status: 'rechazada',
         customer_rnc: customer?.rnc ?? null, customer_name: customer?.name ?? null, total: Number(order.total),
-        environment: settings.environment, message: alanubeError(r.status, r.json), provider_response: r.json,
+        environment: settings.environment, message: errorText(), provider_response: r.json,
       });
-      return reply({ error: alanubeError(r.status, r.json) }, 422);
+      return reply({ error: errorText() }, 422);
     }
-    const res = readAlanubeResponse(r.json);
+    const res = isApi ? readGenericResponse(r.json, (settings.api_response_map ?? {}) as ResponseMap) : readAlanubeResponse(r.json);
     result = res;
-    raw = r.json;
+    raw = { ...(r.json as object), ...(res.providerId ? { id: res.providerId } : {}) };
     if (res.encf) encf = res.encf;
+    if (providerNumbers && !encf && res.status !== 'rechazada') {
+      result = { ...res, message: [res.message, 'El proveedor no devolvió el e-NCF todavía.'].filter(Boolean).join(' · ') };
+    }
   }
 
   const { data: saved, error } = await admin
@@ -220,7 +279,7 @@ Deno.serve(async (req) => {
       business_id: b,
       order_id: order.id,
       ecf_type: type,
-      encf,
+      encf: encf || null,
       customer_rnc: customer?.rnc ?? null,
       customer_name: customer?.name ?? null,
       provider: settings.provider,
