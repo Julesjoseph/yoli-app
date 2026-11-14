@@ -108,6 +108,11 @@ if (win) {
 }
 writeFileSync(join('android', 'local.properties'), `sdk.dir=${sdk.replace(/\\/g, '\\\\').replace(/:/g, '\\:')}\n`);
 
+// Un Gradle viejo que quedó abierto puede dejar archivos trabados en Windows: se cierra antes.
+try {
+  execSync(win ? 'gradlew.bat --stop' : './gradlew --stop', { stdio: 'ignore', cwd: 'android', env });
+} catch {}
+
 console.log('\n2/3 Compilando la APK (la primera vez tarda 10-20 minutos)…');
 // Solo los procesadores de celulares y tablets reales (no emuladores): compila en la mitad del tiempo.
 const archs = '-PreactNativeArchitectures=arm64-v8a,armeabi-v7a';
