@@ -1,10 +1,15 @@
 import { randomUUID } from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { notifyLocalChange } from '@/sync/sync';
+
 import {
   buildProfitReport,
   computeOrderTotals,
   ingredientUsage,
+  itbisFor,
+  priceFor,
+  round2,
   type Channel,
   type OrderForReport,
   type RecipeItem,
@@ -16,6 +21,16 @@ export interface Product {
   name: string;
   price: number;
   itbis_rate: number;
+  image_url: string | null;
+  price_pedidosya: number | null;
+  price_ubereats: number | null;
+  /** 1 = no se cobra ITBIS en PedidosYa / Uber Eats (aunque en el local sí). */
+  delivery_itbis_exempt?: number | null;
+  /** Cuántas opciones para elegir tiene (si es combo con acompañantes). */
+  choices?: number;
+  /** En un combo ya armado: el producto real y los productos que eligió el cliente. */
+  base_id?: string;
+  chosen?: string[];
 }
 export interface Category {
   id: string;
@@ -42,23 +57,56 @@ export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'platafor
 export const localDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+export type Role = 'dueno' | 'gerente' | 'cajero' | 'cocina';
+
+export const ROLE_LABELS: Record<Role, string> = {
+  dueno: 'Dueño',
+  gerente: 'Gerente',
+  cajero: 'Cajero',
+  cocina: 'Cocina',
+};
+
 export interface Context {
+  demo: boolean;
+  userId: string;
+  role: Role;
   businessId: string;
+  businessName: string;
+  /** Logo del negocio (URL), vacío si no tiene. */
+  businessLogo: string;
   locationId: string;
+  locationName: string;
 }
 
-export async function getContext(db: SQLiteDatabase): Promise<Context> {
+/** Lee el negocio/local/rol activo. Devuelve null si falta elegir algo. */
+export async function getContext(db: SQLiteDatabase): Promise<Context | null> {
   const rows = await db.getAllAsync<{ key: string; value: string }>('SELECT key, value FROM app_settings');
-  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  return { businessId: map.business_id, locationId: map.location_id };
+  const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  if (!m.business_id || !m.location_id || !m.role || !m.user_id) return null;
+  return {
+    demo: m.mode === 'demo',
+    userId: m.user_id,
+    role: m.role as Role,
+    businessId: m.business_id,
+    businessName: m.business_name ?? '',
+    businessLogo: m.business_logo ?? '',
+    locationId: m.location_id,
+    locationName: m.location_name ?? '',
+  };
 }
 
-async function enqueue(db: SQLiteDatabase, table: string, payload: object) {
+// Tablas de la nube que guardan quién hizo el registro
+const HAS_CREATED_BY = new Set(['orders', 'inventory_movements', 'expenses']);
+
+async function enqueue(db: SQLiteDatabase, table: string, payload: object, ctx?: Context) {
+  const body = ctx && !ctx.demo && HAS_CREATED_BY.has(table) ? { ...payload, created_by: ctx.userId } : payload;
   await db.runAsync('INSERT INTO outbox (table_name, payload, created_at) VALUES (?, ?, ?)', [
     table,
-    JSON.stringify(payload),
+    JSON.stringify(body),
     new Date().toISOString(),
   ]);
+  // Se sube enseguida (un momento después, para juntar todo lo de la misma venta).
+  if (!ctx?.demo) notifyLocalChange();
 }
 
 export const listCategories = (db: SQLiteDatabase) =>
@@ -66,7 +114,9 @@ export const listCategories = (db: SQLiteDatabase) =>
 
 export const listProducts = (db: SQLiteDatabase) =>
   db.getAllAsync<Product>(
-    'SELECT id, category_id, name, price, itbis_rate FROM products WHERE active = 1 ORDER BY name',
+    `SELECT id, category_id, name, price, itbis_rate, image_url, price_pedidosya, price_ubereats, delivery_itbis_exempt,
+       (SELECT COUNT(*) FROM combo_items c WHERE c.product_id = products.id AND c.group_name <> '') AS choices
+     FROM products WHERE active = 1 ORDER BY name`,
   );
 
 export async function getCommissionRates(db: SQLiteDatabase, businessId: string) {
@@ -75,6 +125,36 @@ export async function getCommissionRates(db: SQLiteDatabase, businessId: string)
     [businessId],
   );
   return Object.fromEntries(rows.map((r) => [r.platform_id, r.commission_rate])) as Record<string, number>;
+}
+
+
+/** Cuánto inventario consume una venta: el producto, lo que trae siempre (combo) y lo que eligió el cliente. */
+async function inventoryUsage(db: SQLiteDatabase, lines: { product: Product; quantity: number }[]) {
+  if (!lines.length) return new Map<string, number>();
+  const baseIds = [...new Set(lines.map((l) => l.product.base_id ?? l.product.id))];
+  const fixed = await db.getAllAsync<{ product_id: string; item_product_id: string }>(
+    `SELECT product_id, item_product_id FROM combo_items
+     WHERE group_name = '' AND product_id IN (${baseIds.map(() => '?').join(',')})`,
+    baseIds,
+  );
+  const sold = lines.flatMap((l) => {
+    const base = l.product.base_id ?? l.product.id;
+    return [
+      { productId: base, quantity: l.quantity },
+      ...fixed.filter((f) => f.product_id === base).map((f) => ({ productId: f.item_product_id, quantity: l.quantity })),
+      ...(l.product.chosen ?? []).map((id) => ({ productId: id, quantity: l.quantity })),
+    ];
+  });
+  const productIds = [...new Set(sold.map((s) => s.productId))];
+  const recipes = await db.getAllAsync<{ product_id: string; ingredient_id: string; quantity: number }>(
+    `SELECT product_id, ingredient_id, quantity FROM recipe_items
+     WHERE product_id IN (${productIds.map(() => '?').join(',')})`,
+    productIds,
+  );
+  return ingredientUsage(
+    sold,
+    recipes.map<RecipeItem>((r) => ({ productId: r.product_id, ingredientId: r.ingredient_id, quantity: r.quantity })),
+  );
 }
 
 /**
@@ -90,24 +170,19 @@ export async function recordSale(
     paymentMethod: PaymentMethod;
     externalRef?: string;
     applyTipLaw?: boolean;
+    /** Descuento en RD$ (con ITBIS). */
+    discount?: number;
+    /** Efectivo que entregó el cliente (para calcular la devuelta). */
+    cashReceived?: number | null;
   },
 ) {
   const rates = await getCommissionRates(db, ctx.businessId);
   const totals = computeOrderTotals(
-    input.lines.map((l) => ({ unitPrice: l.product.price, quantity: l.quantity, itbisRate: l.product.itbis_rate })),
+    input.lines.map((l) => ({ unitPrice: priceFor(l.product, input.channel), quantity: l.quantity, itbisRate: itbisFor(l.product, input.channel) })),
     input.channel,
-    { commissionRate: rates[input.channel] ?? 0, applyTipLaw: input.applyTipLaw },
+    { commissionRate: rates[input.channel] ?? 0, applyTipLaw: input.applyTipLaw, discount: input.discount },
   );
-  const productIds = input.lines.map((l) => l.product.id);
-  const recipes = await db.getAllAsync<{ product_id: string; ingredient_id: string; quantity: number }>(
-    `SELECT product_id, ingredient_id, quantity FROM recipe_items
-     WHERE product_id IN (${productIds.map(() => '?').join(',')})`,
-    productIds,
-  );
-  const usage = ingredientUsage(
-    input.lines.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
-    recipes.map<RecipeItem>((r) => ({ productId: r.product_id, ingredientId: r.ingredient_id, quantity: r.quantity })),
-  );
+  const usage = await inventoryUsage(db, input.lines);
 
   const now = new Date().toISOString();
   const order = {
@@ -125,25 +200,39 @@ export async function recordSale(
     net_income: totals.netIncome,
     payment_method: input.paymentMethod,
     created_at: now,
+    discount: totals.discount,
+    cash_received: input.cashReceived ? round2(input.cashReceived) : null,
+    change_given: input.cashReceived ? round2(Math.max(0, input.cashReceived - totals.total)) : null,
   };
+  if (order.cash_received !== null && order.cash_received < totals.total) {
+    throw new Error('El efectivo recibido es menor que el total.');
+  }
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO orders (id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law,
-        total, platform_commission, net_income, payment_method, created_at)
+        total, platform_commission, net_income, payment_method, created_at, discount, cash_received, change_given)
        VALUES ($id, $business_id, $location_id, $channel, $external_ref, $status, $subtotal, $itbis, $tip_law,
-        $total, $platform_commission, $net_income, $payment_method, $created_at)`,
+        $total, $platform_commission, $net_income, $payment_method, $created_at, $discount, $cash_received, $change_given)`,
       Object.fromEntries(Object.entries(order).map(([k, v]) => ['$' + k, v])),
     );
-    await enqueue(db, 'orders', order);
+    // El descuento solo se sube si hay uno (así sigue funcionando aunque la nube aún no tenga esa columna).
+    // Las columnas nuevas solo se suben si tienen valor (así funciona aunque la nube aún no las tenga).
+    const cloudOrder: Record<string, unknown> = { ...order };
+    if (!order.discount) delete cloudOrder.discount;
+    if (order.cash_received === null) {
+      delete cloudOrder.cash_received;
+      delete cloudOrder.change_given;
+    }
+    await enqueue(db, 'orders', cloudOrder, ctx);
 
     for (const l of input.lines) {
       const item = {
         id: randomUUID(),
         order_id: order.id,
-        product_id: l.product.id,
+        product_id: l.product.base_id ?? l.product.id,
         name: l.product.name,
-        unit_price: l.product.price,
+        unit_price: priceFor(l.product, input.channel),
         quantity: l.quantity,
       };
       await db.runAsync(
@@ -159,6 +248,129 @@ export async function recordSale(
   });
 
   return { order, totals };
+}
+
+/**
+ * Guarda una venta que ya pasó en una plataforma (por ejemplo, del reporte de
+ * PedidosYa): con su fecha, sus precios y lo que de verdad le quedó al negocio.
+ * Si ya existe (mismo id), no hace nada. Devuelve true si la guardó.
+ */
+export async function recordImportedSale(
+  db: SQLiteDatabase,
+  ctx: Context,
+  input: {
+    id: string;
+    channel: Channel;
+    externalRef: string;
+    createdAt: string;
+    lines: { product: Product | null; name: string; quantity: number; unitPrice: number }[];
+    /** Descuento que pagó el negocio (con ITBIS). */
+    discount: number;
+    /** Lo que le queda al negocio después de comisiones y cargos. */
+    netIncome: number;
+    /** Toda la venta sin ITBIS (exenta). */
+    itbisExempt?: boolean;
+  },
+): Promise<boolean> {
+  const exists = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM orders WHERE id = ? OR (channel = ? AND external_ref = ?)',
+    [input.id, input.channel, input.externalRef],
+  );
+  if (exists) return false;
+  const totals = computeOrderTotals(
+    input.lines.map((l) => ({ unitPrice: l.unitPrice, quantity: l.quantity, itbisRate: input.itbisExempt ? 0 : l.product ? itbisFor(l.product, input.channel) : 0.18 })),
+    input.channel,
+    { discount: input.discount, applyTipLaw: false },
+  );
+  const matched = input.lines.filter((l): l is typeof l & { product: Product } => !!l.product);
+  const usage = await inventoryUsage(db, matched);
+  const order = {
+    id: input.id,
+    business_id: ctx.businessId,
+    location_id: ctx.locationId,
+    channel: input.channel,
+    external_ref: input.externalRef,
+    status: 'pagada',
+    subtotal: totals.subtotal,
+    itbis: totals.itbis,
+    tip_law: 0,
+    total: totals.total,
+    platform_commission: round2(totals.gross - input.netIncome),
+    net_income: round2(input.netIncome),
+    payment_method: 'plataforma' as PaymentMethod,
+    created_at: input.createdAt,
+    discount: totals.discount,
+  };
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO orders (id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law,
+        total, platform_commission, net_income, payment_method, created_at, discount)
+       VALUES ($id, $business_id, $location_id, $channel, $external_ref, $status, $subtotal, $itbis, $tip_law,
+        $total, $platform_commission, $net_income, $payment_method, $created_at, $discount)`,
+      Object.fromEntries(Object.entries(order).map(([k, v]) => ['$' + k, v])),
+    );
+    const cloudOrder: Record<string, unknown> = { ...order };
+    if (!order.discount) delete cloudOrder.discount;
+    await enqueue(db, 'orders', cloudOrder, ctx);
+    for (const l of input.lines) {
+      const item = {
+        id: randomUUID(),
+        order_id: order.id,
+        product_id: l.product ? l.product.base_id ?? l.product.id : null,
+        name: l.product?.name ?? l.name,
+        unit_price: round2(l.unitPrice),
+        quantity: l.quantity,
+      };
+      await db.runAsync(
+        'INSERT INTO order_items (id, order_id, product_id, name, unit_price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
+        [item.id, item.order_id, item.product_id, item.name, item.unit_price, item.quantity],
+      );
+      await enqueue(db, 'order_items', item);
+    }
+    for (const [ingredientId, qty] of usage) {
+      await insertMovement(db, ctx, ingredientId, -qty, 'venta', { orderId: order.id, createdAt: input.createdAt });
+    }
+  });
+  return true;
+}
+
+/**
+ * Deja sin ITBIS las ventas que entraron desde un reporte de delivery (PedidosYa) en este local.
+ * El total no cambia: lo que era ITBIS pasa a ser parte del subtotal. Devuelve cuántas cambió.
+ */
+export async function exemptImportedDeliverySales(db: SQLiteDatabase, ctx: Context, channel: Channel): Promise<number> {
+  const rows = await db.getAllAsync<Record<string, unknown> & { id: string; subtotal: number; itbis: number }>(
+    `SELECT id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law, total,
+            platform_commission, net_income, payment_method, created_at, discount
+       FROM orders
+      WHERE location_id = ? AND channel = ? AND payment_method = 'plataforma' AND external_ref IS NOT NULL AND itbis > 0`,
+    [ctx.locationId, channel],
+  );
+  await db.withTransactionAsync(async () => {
+    for (const o of rows) {
+      const subtotal = round2(o.subtotal + o.itbis);
+      await db.runAsync('UPDATE orders SET subtotal = ?, itbis = 0 WHERE id = ?', [subtotal, o.id]);
+      await enqueue(db, 'orders', { ...o, subtotal, itbis: 0, discount: o.discount ?? 0 }, ctx);
+    }
+  });
+  return rows.length;
+}
+
+/** Corrige lo que te quedó de una venta importada (cuando PedidosYa ya lo calculó). */
+export async function updateImportedNet(db: SQLiteDatabase, ctx: Context, orderId: string, netIncome: number) {
+  const o = await db.getFirstAsync<Record<string, unknown> & { total: number }>(
+    `SELECT id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law, total,
+            platform_commission, net_income, payment_method, created_at, discount
+       FROM orders WHERE id = ?`,
+    [orderId],
+  );
+  if (!o) return;
+  const net = round2(netIncome);
+  const commission = round2(o.total - net);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE orders SET net_income = ?, platform_commission = ? WHERE id = ?', [net, commission, orderId]);
+    await enqueue(db, 'orders', { ...o, net_income: net, platform_commission: commission, discount: o.discount ?? 0 }, ctx);
+  });
 }
 
 async function insertMovement(
@@ -185,7 +397,7 @@ async function insertMovement(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [mv.id, mv.business_id, mv.location_id, mv.ingredient_id, mv.quantity, mv.reason, mv.order_id, mv.note, mv.created_at],
   );
-  await enqueue(db, 'inventory_movements', mv);
+  await enqueue(db, 'inventory_movements', mv, ctx);
 }
 
 export async function addStock(
@@ -233,7 +445,7 @@ export async function addExpense(
       [exp.id, exp.business_id, exp.location_id, exp.category, exp.description, exp.amount, exp.supplier_rnc, exp.ncf,
         exp.spent_at, exp.created_at],
     );
-    await enqueue(db, 'expenses', exp);
+    await enqueue(db, 'expenses', exp, ctx);
   });
 }
 
@@ -295,3 +507,20 @@ export async function pendingSyncCount(db: SQLiteDatabase) {
   const r = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM outbox');
   return r?.n ?? 0;
 }
+
+export interface RecentOrder {
+  id: string;
+  channel: Channel;
+  total: number;
+  created_at: string;
+  items: number;
+}
+
+export const listRecentOrders = (db: SQLiteDatabase, ctx: Context, limit = 5) =>
+  db.getAllAsync<RecentOrder>(
+    `SELECT o.id, o.channel, o.total, o.created_at, COALESCE(SUM(oi.quantity), 0) AS items
+     FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.id
+     WHERE o.location_id = ? AND o.status = 'pagada'
+     GROUP BY o.id ORDER BY o.created_at DESC LIMIT ?`,
+    [ctx.locationId, limit],
+  );

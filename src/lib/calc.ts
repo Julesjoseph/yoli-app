@@ -16,6 +16,11 @@ export const CHANNEL_LABELS: Record<Channel, string> = {
 
 export const DELIVERY_CHANNELS: Channel[] = ['pedidosya', 'ubereats'];
 
+/** ITBIS de un producto en un canal: puede estar exento solo en PedidosYa / Uber Eats. */
+export function itbisFor(p: { itbis_rate: number; delivery_itbis_exempt?: number | boolean | null }, channel: Channel) {
+  return DELIVERY_CHANNELS.includes(channel) && p.delivery_itbis_exempt ? 0 : p.itbis_rate;
+}
+
 export const TIP_LAW_RATE = 0.1;
 
 export interface CartLine {
@@ -24,8 +29,19 @@ export interface CartLine {
   itbisRate: number; // 0.18
 }
 
+/** Precio de un producto según el canal (PedidosYa y Uber Eats pueden tener su propio precio). */
+export function priceFor(
+  p: { price: number; price_pedidosya?: number | null; price_ubereats?: number | null },
+  channel: Channel,
+) {
+  if (channel === 'pedidosya' && p.price_pedidosya) return p.price_pedidosya;
+  if (channel === 'ubereats' && p.price_ubereats) return p.price_ubereats;
+  return p.price;
+}
+
 export interface OrderTotals {
-  gross: number; // suma de precios del menú (con ITBIS)
+  discount: number; // descuento aplicado (con ITBIS)
+  gross: number; // suma de precios del menú (con ITBIS), ya con el descuento
   subtotal: number; // sin ITBIS
   itbis: number;
   tipLaw: number;
@@ -39,17 +55,21 @@ export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 10
 export function computeOrderTotals(
   lines: CartLine[],
   channel: Channel,
-  opts: { commissionRate?: number; applyTipLaw?: boolean } = {},
+  opts: { commissionRate?: number; applyTipLaw?: boolean; discount?: number } = {},
 ): OrderTotals {
-  let gross = 0;
-  let subtotal = 0;
+  let full = 0;
+  let fullSubtotal = 0;
   for (const l of lines) {
     const lineGross = l.unitPrice * l.quantity;
-    gross += lineGross;
-    subtotal += lineGross / (1 + l.itbisRate);
+    full += lineGross;
+    fullSubtotal += lineGross / (1 + l.itbisRate);
   }
-  gross = round2(gross);
-  subtotal = round2(subtotal);
+  // El descuento (en RD$, con ITBIS) baja el precio de toda la orden por igual,
+  // así el ITBIS y la propina se calculan sobre lo que de verdad se cobra.
+  const discount = round2(Math.min(Math.max(opts.discount ?? 0, 0), full));
+  const factor = full > 0 ? (full - discount) / full : 1;
+  const gross = round2(full - discount);
+  const subtotal = round2(fullSubtotal * factor);
   const itbis = round2(gross - subtotal);
 
   const applyTip = channel === 'local' && (opts.applyTipLaw ?? true);
@@ -60,7 +80,7 @@ export function computeOrderTotals(
   const platformCommission = isDelivery ? round2(gross * (opts.commissionRate ?? 0)) : 0;
   const netIncome = round2(gross - platformCommission);
 
-  return { gross, subtotal, itbis, tipLaw, total, platformCommission, netIncome };
+  return { discount, gross, subtotal, itbis, tipLaw, total, platformCommission, netIncome };
 }
 
 export interface RecipeItem {
