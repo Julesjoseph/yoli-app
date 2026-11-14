@@ -13,6 +13,7 @@ import { canManage, useBusiness, useBusinessState, useFocusData } from '@/hooks/
 import { useThemePreference, type ThemePreference } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/sync/supabase';
+import { pullCatalog, pullLocationActivity } from '@/sync/pull';
 import { pushOutbox } from '@/sync/sync';
 
 function initials(name: string) {
@@ -65,16 +66,22 @@ export default function SettingsScreen() {
   const trialDays = plan?.trialEndsAt ? Math.max(0, Math.ceil((new Date(plan.trialEndsAt).getTime() - Date.now()) / 86_400_000)) : 0;
 
   async function sync() {
+    setSyncMsg('Sincronizando…');
     const r = await pushOutbox(db);
-    setSyncMsg(
-      r.offlineMode
-        ? 'Modo demo: no hay nube configurada.'
-        : r.error
-          ? `No se pudo subir (${r.error}). Se reintentará solo.`
-          : `Listo: ${r.pushed} cambios subidos.`,
-    );
+    if (r.offlineMode) return setSyncMsg('Modo demo: no hay nube configurada.');
+    if (r.error) {
+      reloadPending();
+      return setSyncMsg(`No se pudo subir (${r.error}). Se reintentará solo.`);
+    }
+    // Además de subir, bajar lo de la nube (ventas de otros equipos, menú) y decir si algo falla.
+    try {
+      await pullCatalog(db, ctx.businessId);
+      await pullLocationActivity(db, ctx.businessId, ctx.locationId);
+      setSyncMsg(`Listo: ${r.pushed} cambios subidos y ventas de la nube al día.`);
+    } catch (e) {
+      setSyncMsg(`Subió ${r.pushed} cambios, pero no pudo bajar de la nube: ${e instanceof Error ? e.message : String(e)}`);
+    }
     reloadPending();
-    if (!r.error && !r.offlineMode) reload();
   }
 
   return (
