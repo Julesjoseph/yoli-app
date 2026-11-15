@@ -45,11 +45,13 @@ export default function HomeScreen() {
 
   const actions: { icon: IconName; label: string; hint: string; href: Href; color: string; show: boolean }[] = [
     { icon: 'cash-register', label: 'Nueva venta', hint: 'Abrir la caja', href: '/caja', color: t.primary, show: true },
+    { icon: 'book-open-variant', label: 'Catálogo', hint: 'Productos y precios', href: '/catalogo', color: t.info, show: manager },
     { icon: 'receipt-text-outline', label: 'Registrar gasto', hint: 'Compras y pagos', href: '/gastos', color: t.accent, show: manager },
     { icon: 'scale-balance', label: 'Contabilidad', hint: 'Ganancia, por cobrar y pagar', href: '/contabilidad', color: t.info, show: manager },
     { icon: 'package-variant', label: 'Inventario', hint: 'Stock e insumos', href: '/inventario', color: t.success, show: true },
     { icon: 'cart-variant', label: 'Lista de compras', hint: 'Lo que hay que comprar', href: '/compras', color: t.info, show: true },
     { icon: 'account-cash', label: 'Ventas a crédito', hint: 'Quién debe y abonos', href: '/credito', color: t.danger, show: true },
+    { icon: 'line-scan', label: 'Escanear factura', hint: 'Compra al inventario', href: '/escanear-factura', color: t.success, show: manager },
   ];
   const visible = actions.filter((a) => a.show);
   const tileWidth = width >= 768 ? '23.5%' : '48%';
