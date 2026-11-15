@@ -86,7 +86,7 @@ export function Screen({
           {subtitle ? (
             <View style={styles.subtitleRow}>
               <Icon name="map-marker-outline" size={15} color={t.primary} />
-              <Text style={{ color: t.textSecondary, fontSize: 14, fontWeight: '600' }}>{subtitle}</Text>
+              <Text numberOfLines={2} style={{ color: t.textSecondary, fontSize: 14, fontWeight: '600', flexShrink: 1 }}>{subtitle}</Text>
             </View>
           ) : null}
         </View>
@@ -184,11 +184,11 @@ export function SectionTitle({ children, icon, right }: { children: ReactNode; i
   const t = useTheme();
   return (
     <View style={[styles.row, { marginTop: 8 }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
         {icon ? <Icon name={icon} size={20} color={t.primary} /> : null}
-        <Text style={{ color: t.text, fontSize: 19, fontWeight: '800', letterSpacing: -0.3 }}>{children}</Text>
+        <Text style={{ color: t.text, fontSize: 19, fontWeight: '800', letterSpacing: -0.3, flexShrink: 1 }}>{children}</Text>
       </View>
-      {right}
+      {right ? <View style={{ flexShrink: 0 }}>{right}</View> : null}
     </View>
   );
 }

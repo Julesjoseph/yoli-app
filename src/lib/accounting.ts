@@ -219,11 +219,27 @@ export function buildPayables(expenses: AccExpense[], today: string): { items: P
 // Períodos
 // ---------------------------------------------------------------------------
 
+/** La semana del negocio va de miércoles a martes (0 = domingo … 3 = miércoles). */
+export const WEEK_START_DAY = 3;
+
+/** Primer día (miércoles, a medianoche) de la semana en que cae esta fecha. */
+export function weekStart(d: Date): Date {
+  const back = (d.getDay() - WEEK_START_DAY + 7) % 7;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - back);
+}
+
+/** "mié 11 nov – mar 17 nov" para una semana que empieza en `start`. */
+export function weekLabel(start: Date): string {
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+  const f = (x: Date) => x.toLocaleDateString('es-DO', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
+  return `${f(start)} – ${f(end)}`;
+}
+
 export type AccPeriod = 'hoy' | 'semana' | 'mes' | 'mes_pasado' | 'anio';
 
 export const ACC_PERIODS: { value: AccPeriod; label: string }[] = [
   { value: 'hoy', label: 'Hoy' },
-  { value: 'semana', label: 'Esta semana' },
+  { value: 'semana', label: 'Esta semana (mié–mar)' },
   { value: 'mes', label: 'Este mes' },
   { value: 'mes_pasado', label: 'Mes pasado' },
   { value: 'anio', label: 'Este año' },
@@ -237,7 +253,7 @@ export function periodRange(period: AccPeriod, now = new Date()) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let from = today;
   let to = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-  if (period === 'semana') from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
+  if (period === 'semana') from = weekStart(today); // de miércoles a martes
   if (period === 'mes') from = new Date(today.getFullYear(), today.getMonth(), 1);
   if (period === 'mes_pasado') {
     from = new Date(today.getFullYear(), today.getMonth() - 1, 1);

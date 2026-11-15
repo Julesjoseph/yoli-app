@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { round2 } from '@/lib/calc';
-import type { PurchaseLine, ScannedInvoice } from '@/lib/invoice-scan';
+import { fitToIngredient, matchIngredient, norm as normName, type PurchaseLine, type ScannedInvoice } from '@/lib/invoice-scan';
 import { supabase } from '@/sync/supabase';
 
 import { listCatalogIngredients, saveIngredient } from './catalog';
@@ -65,19 +65,44 @@ export async function savePurchase(
   const existing = new Map((await listCatalogIngredients(db)).map((i) => [i.id, i]));
 
   // 1) Insumos nuevos y costo actualizado (necesita internet: el catálogo vive en la nube).
+  // Antes de crear uno nuevo se busca si ya existe (o si otra línea de esta factura ya lo creó):
+  // así no se duplica, solo se suma la cantidad.
   const ids = new Map<string, string>();
-  for (const l of stockLines) {
-    const unitCost = l.cost > 0 ? round2(l.cost / l.quantity) : null;
+  const known: { id: string; name: string; unit: string }[] = [...existing.values()].map((i) => ({ id: i.id, name: i.name, unit: i.unit }));
+  const lines = stockLines.map((l) => {
+    if (l.target !== 'nuevo') return l;
+    const same = matchIngredient(l.name, known);
+    return same ? fitToIngredient(l, same) : l;
+  });
+  // Costo por unidad: si el mismo insumo viene en varias líneas, se promedia.
+  const totals = new Map<string, { qty: number; cost: number }>();
+  const created = new Map<string, string>(); // nombre normalizado → id creado en esta factura
+  for (const l of lines) {
+    let id: string | undefined;
     if (l.target === 'nuevo') {
-      const id = await saveIngredient(db, ctx, { name: l.name, unit: l.unit, cost_per_unit: unitCost ?? 0, min_stock: 0 });
-      ids.set(l.key, id);
-    } else {
-      const ing = existing.get(l.target);
-      if (!ing) continue;
-      ids.set(l.key, ing.id);
-      if (unitCost !== null && Math.abs(unitCost - ing.cost_per_unit) > 0.009) {
-        await saveIngredient(db, ctx, { id: ing.id, name: ing.name, unit: ing.unit, cost_per_unit: unitCost, min_stock: ing.min_stock });
+      const key = normName(l.name);
+      id = created.get(key);
+      if (!id) {
+        const unitCost = l.cost > 0 ? round2(l.cost / l.quantity) : 0;
+        id = await saveIngredient(db, ctx, { name: l.name.trim(), unit: l.unit, cost_per_unit: unitCost, min_stock: 0 });
+        created.set(key, id);
+        known.push({ id, name: l.name.trim(), unit: l.unit });
       }
+    } else if (existing.has(l.target)) {
+      id = l.target;
+    }
+    if (!id) continue;
+    ids.set(l.key, id);
+    if (existing.has(id) && l.cost > 0) {
+      const t = totals.get(id) ?? { qty: 0, cost: 0 };
+      totals.set(id, { qty: t.qty + l.quantity, cost: t.cost + l.cost });
+    }
+  }
+  for (const [id, t] of totals) {
+    const ing = existing.get(id)!;
+    const unitCost = round2(t.cost / t.qty);
+    if (Math.abs(unitCost - ing.cost_per_unit) > 0.009) {
+      await saveIngredient(db, ctx, { id: ing.id, name: ing.name, unit: ing.unit, cost_per_unit: unitCost, min_stock: ing.min_stock });
     }
   }
 
@@ -97,12 +122,12 @@ export async function savePurchase(
   // La nota lleva la referencia del gasto: si se anula, lo que entró sale del inventario.
   const note = [input.supplier, input.ncf, expenseRef(expenseId)].filter(Boolean).join(' · ');
   await db.withTransactionAsync(async () => {
-    for (const l of stockLines) {
+    for (const l of lines) {
       const id = ids.get(l.key);
       if (id) await insertMovement(db, ctx, id, l.quantity, 'compra', { note });
     }
   });
-  return { expenseId, stocked: stockLines.filter((l) => ids.has(l.key)).length };
+  return { expenseId, stocked: lines.filter((l) => ids.has(l.key)).length };
 }
 
 /** Lecturas con IA usadas este mes y cuántas tiene el negocio (null si no aplica). */

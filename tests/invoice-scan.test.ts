@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanDate, cleanNcf, cleanRnc, invoiceTotal, toPurchaseLines, type ScannedInvoice } from '../src/lib/invoice-scan.ts';
+import { cleanDate, cleanNcf, cleanRnc, convertQty, invoiceTotal, matchIngredient, nameSimilarity, toPurchaseLines, type ScannedInvoice } from '../src/lib/invoice-scan.ts';
 
 const inv: ScannedInvoice = {
   is_invoice: true,
@@ -44,4 +44,45 @@ test('líneas: insumo existente, por nombre, nuevo y fuera de inventario', () =>
   assert.equal(lines[2].unit, 'unidad');
   assert.equal(lines[3].target, 'no');
   assert.equal(invoiceTotal(inv, lines), 3540);
+});
+
+test('no duplica: reconoce el insumo que ya existe aunque la factura lo escriba distinto', () => {
+  const ings = [
+    { id: 'pollo', name: 'Pollo', unit: 'kg' },
+    { id: 'aceite', name: 'Aceite vegetal', unit: 'litro' },
+    { id: 'arroz', name: 'Arroz', unit: 'lb' },
+    { id: 'salami', name: 'Salami', unit: 'lb' },
+  ];
+  assert.equal(matchIngredient('Pollo entero fresco', ings)?.id, 'pollo');
+  assert.equal(matchIngredient('ACEITE VEGETAL 1GL', ings)?.id, 'aceite');
+  assert.equal(matchIngredient('Arroz selecto 25 lb', ings)?.id, 'arroz');
+  assert.equal(matchIngredient('Salamis', ings)?.id, 'salami');
+  assert.equal(matchIngredient('Queso de freír', ings), null, 'producto distinto: insumo nuevo');
+  assert.equal(matchIngredient('Salsa de tomate', [{ id: 't', name: 'Tomate' }]), null, 'no confunde salsa de tomate con tomate');
+  assert.equal(nameSimilarity('Pollo', 'Pollo'), 1);
+
+  const lines = toPurchaseLines(
+    {
+      ...inv,
+      items: [
+        { description: 'POLLO ENTERO LB', name: 'Pollo entero', quantity: 10, unit: 'lb', unit_cost: 95, line_total: 950, ingredient_id: null, for_inventory: true },
+        { description: 'ACEITE VEG 1GL', name: 'Aceite vegetal', quantity: 1, unit: 'galon', unit_cost: 450, line_total: 450, ingredient_id: null, for_inventory: true },
+      ],
+    },
+    ings,
+  );
+  assert.equal(lines[0].target, 'pollo');
+  assert.equal(lines[0].name, 'Pollo', 'usa el nombre del inventario');
+  assert.equal(lines[0].unit, 'kg');
+  assert.equal(lines[0].quantity, 4.5359, '10 lb pasan a kilos');
+  assert.equal(lines[0].cost, 950, 'el costo no cambia');
+  assert.equal(lines[1].target, 'aceite');
+  assert.equal(lines[1].quantity, 3.7854);
+});
+
+test('convierte unidades compatibles', () => {
+  assert.equal(convertQty(2, 'kg', 'lb'), 4.4092);
+  assert.equal(convertQty(500, 'ml', 'litro'), 0.5);
+  assert.equal(convertQty(3, 'unidad', 'unidad'), 3);
+  assert.equal(convertQty(3, 'unidad', 'kg'), null, 'unidades con peso no se convierten');
 });

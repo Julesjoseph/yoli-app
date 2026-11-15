@@ -14,6 +14,7 @@ import {
   type OrderForReport,
   type RecipeItem,
 } from '@/lib/calc';
+import { weekStart } from '@/lib/accounting';
 
 export interface Product {
   id: string;
@@ -515,7 +516,7 @@ export type Period = 'hoy' | 'semana' | 'mes';
 
 export function periodStart(period: Period, now = new Date()): Date {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (period === 'semana') d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // desde el lunes
+  if (period === 'semana') return weekStart(d); // de miércoles a martes
   if (period === 'mes') d.setDate(1);
   return d;
 }

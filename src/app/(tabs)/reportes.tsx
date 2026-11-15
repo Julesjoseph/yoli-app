@@ -16,7 +16,7 @@ import { CHANNEL_LABELS, formatRD, type Channel } from '@/lib/calc';
 
 const PERIODS: { value: Period; label: string }[] = [
   { value: 'hoy', label: 'Hoy' },
-  { value: 'semana', label: 'Esta semana' },
+  { value: 'semana', label: 'Esta semana (mié–mar)' },
   { value: 'mes', label: 'Este mes' },
 ];
 

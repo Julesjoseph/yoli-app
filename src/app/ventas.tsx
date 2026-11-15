@@ -8,6 +8,7 @@ import { Card, Chips, EmptyState, Field, Icon, IconBadge, Label, Pill, Row, Scre
 import { ChannelColors } from '@/constants/theme';
 import { useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
+import { weekLabel, weekStart } from '@/lib/accounting';
 import { CHANNEL_LABELS, formatRD, round2, type Channel } from '@/lib/calc';
 
 type Sale = {
@@ -17,13 +18,14 @@ type Sale = {
   total: number;
   net_income: number;
   platform_commission: number;
+  tip_law: number;
   payment_method: string | null;
   external_ref: string | null;
   created_at: string;
   items: string | null;
 };
 
-type Period = 'hoy' | 'ayer' | '7d' | '30d' | 'dia';
+type Period = 'hoy' | 'ayer' | 'semana' | 'semana_pasada' | '30d' | 'dia';
 type ChannelFilter = 'todos' | Channel;
 type PayFilter = 'todos' | 'efectivo' | 'tarjeta' | 'transferencia' | 'credito' | 'plataforma';
 
@@ -46,7 +48,7 @@ const dayTitle = (k: string) => {
   const yesterday = dayKey(new Date(Date.now() - 86400000));
   if (k === today) return 'Hoy';
   if (k === yesterday) return 'Ayer';
-  const s = keyToDate(k).toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' });
+  const s = keyToDate(k).toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'short' }).replace(/\./g, '');
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 const time = (iso: string) => new Date(iso).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit' });
@@ -58,7 +60,7 @@ export default function SalesScreen() {
   const ctx = useBusiness();
   const t = useTheme();
   const params = useLocalSearchParams<{ dia?: string }>();
-  const [period, setPeriod] = useState<Period>(params.dia ? 'dia' : '7d');
+  const [period, setPeriod] = useState<Period>(params.dia ? 'dia' : 'semana');
   const [day, setDay] = useState<string | null>(params.dia ?? null);
   const [channel, setChannel] = useState<ChannelFilter>('todos');
   const [pay, setPay] = useState<PayFilter>('todos');
@@ -74,7 +76,7 @@ export default function SalesScreen() {
   const [sales] = useFocusData(
     () =>
       db.getAllAsync<Sale>(
-        `SELECT o.id, o.channel, o.status, o.total, o.net_income, o.platform_commission, o.payment_method, o.external_ref, o.created_at,
+        `SELECT o.id, o.channel, o.status, o.total, o.net_income, o.platform_commission, COALESCE(o.tip_law, 0) AS tip_law, o.payment_method, o.external_ref, o.created_at,
                 GROUP_CONCAT(oi.quantity || '× ' || oi.name, ', ') AS items
            FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.id
           WHERE o.location_id = ?
@@ -92,11 +94,16 @@ export default function SalesScreen() {
     let to: Date | null = null;
     if (period === 'hoy') from = startOfToday;
     if (period === 'ayer') {
-      from = new Date(startOfToday.getTime() - 86400000);
+      from = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), startOfToday.getDate() - 1);
       to = startOfToday;
     }
-    if (period === '7d') from = new Date(startOfToday.getTime() - 6 * 86400000);
-    if (period === '30d') from = new Date(startOfToday.getTime() - 29 * 86400000);
+    // La semana del negocio va de miércoles a martes.
+    if (period === 'semana') from = weekStart(startOfToday);
+    if (period === 'semana_pasada') {
+      to = weekStart(startOfToday);
+      from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - 7);
+    }
+    if (period === '30d') from = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), startOfToday.getDate() - 29);
     if (period === 'dia' && day) {
       from = keyToDate(day);
       to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
@@ -117,6 +124,7 @@ export default function SalesScreen() {
   const gross = round2(paid.reduce((n, s) => n + s.total, 0));
   const net = round2(paid.reduce((n, s) => n + s.net_income, 0));
   const commission = round2(paid.reduce((n, s) => n + s.platform_commission, 0));
+  const tips = round2(paid.reduce((n, s) => n + (s.tip_law ?? 0), 0));
 
   const days = useMemo(() => {
     const map = new Map<string, Sale[]>();
@@ -128,10 +136,29 @@ export default function SalesScreen() {
     return [...map.entries()];
   }, [filtered]);
 
+  // Totales por semana (miércoles a martes) cuando se ven varias semanas.
+  const weeks = useMemo(() => {
+    const map = new Map<string, { start: Date; count: number; gross: number; net: number }>();
+    for (const s of filtered) {
+      if (s.status !== 'pagada') continue;
+      const start = weekStart(new Date(s.created_at));
+      const k = dayKey(start);
+      const w = map.get(k) ?? { start, count: 0, gross: 0, net: 0 };
+      w.count += 1;
+      w.gross += s.total;
+      w.net += s.net_income;
+      map.set(k, w);
+    }
+    return [...map.values()].sort((a, b) => b.start.getTime() - a.start.getTime());
+  }, [filtered]);
+
+  const thisWeek = weekStart(new Date());
+  const lastWeek = new Date(thisWeek.getFullYear(), thisWeek.getMonth(), thisWeek.getDate() - 7);
   const periodOptions: { value: Period; label: string }[] = [
     { value: 'hoy', label: 'Hoy' },
     { value: 'ayer', label: 'Ayer' },
-    { value: '7d', label: '7 días' },
+    { value: 'semana', label: 'Esta semana' },
+    { value: 'semana_pasada', label: 'Semana pasada' },
     { value: '30d', label: '30 días' },
     ...(day ? [{ value: 'dia' as Period, label: keyToDate(day).toLocaleDateString('es-DO', { weekday: 'short', day: 'numeric', month: 'short' }) }] : []),
   ];
@@ -159,9 +186,32 @@ export default function SalesScreen() {
         <Row><Label>Cobrado</Label><Label bold size={18}>{formatRD(gross)}</Label></Row>
         <Row><Label muted>Órdenes</Label><Label muted>{paid.length}{filtered.length > paid.length ? ` (+${filtered.length - paid.length} anuladas)` : ''}</Label></Row>
         <Row><Label muted>Ticket promedio</Label><Label muted>{formatRD(paid.length ? gross / paid.length : 0)}</Label></Row>
-        {commission > 0 ? <Row><Label muted>Comisiones</Label><Label muted>{formatRD(commission)}</Label></Row> : null}
-        <Row><Label muted>Te queda</Label><Label muted>{formatRD(net)}</Label></Row>
+        {tips > 0 ? <Row><Label muted>− Propina de ley</Label><Label muted>{formatRD(tips)}</Label></Row> : null}
+        {commission > 0 ? <Row><Label muted>− Comisiones</Label><Label muted>{formatRD(commission)}</Label></Row> : null}
+        <Row><Label bold>Te queda</Label><Label bold>{formatRD(net)}</Label></Row>
+        <Label muted size={12}>Incluye el ITBIS (es de la DGII) y todavía no resta los gastos. La ganancia está en Contabilidad.</Label>
       </Card>
+
+      {period === 'semana' || period === 'semana_pasada' ? (
+        <Label muted size={13}>{weekLabel(period === 'semana' ? thisWeek : lastWeek)} · la semana va de miércoles a martes</Label>
+      ) : null}
+
+      {weeks.length > 1 ? (
+        <>
+          <SectionTitle icon="calendar-week">Por semana (mié–mar)</SectionTitle>
+          <Card style={{ gap: 8 }}>
+            {weeks.map((w) => (
+              <View key={w.start.toISOString()} style={{ gap: 2 }}>
+                <Row>
+                  <Label bold size={14} style={{ flexShrink: 1 }}>{weekLabel(w.start)}</Label>
+                  <Label bold size={14}>{formatRD(round2(w.gross))}</Label>
+                </Row>
+                <Label muted size={12}>{w.count} venta{w.count === 1 ? '' : 's'} · te queda {formatRD(round2(w.net))}</Label>
+              </View>
+            ))}
+          </Card>
+        </>
+      ) : null}
 
       {sales && !filtered.length ? <EmptyState icon="cart-outline" text="No hay ventas con estos filtros." /> : null}
 
@@ -185,8 +235,8 @@ export default function SalesScreen() {
                   <IconBadge name={CHANNEL_ICONS[s.channel]} color={ChannelColors[s.channel]} size={36} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Label bold size={14}>{CHANNEL_LABELS[s.channel]}</Label>
-                      <Label muted size={12}>{time(s.created_at)}</Label>
+                      <Label bold size={14} numberOfLines={1} style={{ flexShrink: 1 }}>{CHANNEL_LABELS[s.channel]}</Label>
+                      <Label muted size={12} numberOfLines={1} style={{ flexShrink: 0 }}>{time(s.created_at)}</Label>
                       {s.status !== 'pagada' ? <Pill text="ANULADA" color={t.danger} /> : null}
                     </View>
                     <Label muted size={12} numberOfLines={1}>

@@ -15,7 +15,7 @@ import { getAiScanStatus, savePurchase, scanInvoice, type InvoiceFile } from '@/
 import { canManage, useBusiness } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD, round2, parseAmount } from '@/lib/calc';
-import { cleanDate, cleanNcf, cleanRnc, invoiceTotal, matchIngredient, toPurchaseLines, type PurchaseLine, type ScannedInvoice } from '@/lib/invoice-scan';
+import { cleanDate, cleanNcf, cleanRnc, convertQty, fitToIngredient, invoiceTotal, matchIngredient, toPurchaseLines, type PurchaseLine, type ScannedInvoice } from '@/lib/invoice-scan';
 import { parseInvoiceText, type TextCandidate } from '@/lib/invoice-text';
 import { unitName, UNITS } from '@/lib/units';
 
@@ -155,10 +155,9 @@ export default function ScanInvoiceScreen() {
   function addCandidate(c: TextCandidate) {
     const match = matchIngredient(c.name, ingredients);
     const key = `c${Date.now()}`;
-    setLines((ls) => [
-      ...ls,
-      { key, description: c.text, name: match?.name ?? c.name, quantity: c.quantity ?? 1, unit: match?.unit ?? 'unidad', cost: c.amount ?? 0, target: match?.id ?? 'nuevo' },
-    ]);
+    const line: PurchaseLine = { key, description: c.text, name: c.name, quantity: c.quantity ?? 1, unit: 'unidad', cost: c.amount ?? 0, target: 'nuevo' };
+    // Si ya está en el inventario, la línea suma a ese insumo (no se crea otro).
+    setLines((ls) => [...ls, match ? fitToIngredient(line, match) : line]);
     setCandidates((cs) => cs.filter((x) => x !== c));
     setOpen(key);
   }
@@ -331,6 +330,7 @@ export default function ScanInvoiceScreen() {
       <SectionTitle icon="package-variant">{`Productos · ${toStock.length} al inventario`}</SectionTitle>
       {lines.map((l) => {
         const ing = ingredients.find((i) => i.id === l.target);
+        const same = l.target === 'nuevo' ? matchIngredient(l.name, ingredients) : null;
         const status = l.target === 'no' ? 'No va al inventario' : l.target === 'nuevo' ? 'Insumo nuevo' : `Suma a: ${ing?.name ?? '—'}`;
         const color = l.target === 'no' ? t.textSecondary : l.target === 'nuevo' ? t.info : t.success;
         const expanded = open === l.key;
@@ -347,6 +347,12 @@ export default function ScanInvoiceScreen() {
               </View>
               <Icon name={expanded ? 'chevron-up' : 'pencil-outline'} size={20} color={t.textSecondary} />
             </Pressable>
+            {same ? (
+              <Row style={{ gap: 8, backgroundColor: t.infoSoft, borderRadius: 10, padding: 8 }}>
+                <Label size={13} style={{ flex: 1 }}>Ya tienes «{same.name}» en el inventario. ¿Sumar ahí para no duplicarlo?</Label>
+                <Button size="sm" title="Sumar ahí" icon="plus-box-multiple-outline" onPress={() => update(l.key, fitToIngredient(l, same))} />
+              </Row>
+            ) : null}
             {expanded ? (
               <View style={{ gap: 10 }}>
                 <Field label="Nombre en el inventario" icon="tag-outline" value={l.name} onChangeText={(v) => update(l.key, { name: v })} />
@@ -368,7 +374,12 @@ export default function ScanInvoiceScreen() {
                     ...ingredients.map((i) => ({ value: i.id, label: i.name })),
                   ]}
                   value={l.target}
-                  onChange={(v) => update(l.key, { target: v, ...(ingredients.find((i) => i.id === v) ? { unit: ingredients.find((i) => i.id === v)!.unit } : {}) })}
+                  onChange={(v) => {
+                    const to = ingredients.find((i) => i.id === v);
+                    // Al elegir un insumo, la cantidad pasa a su unidad (libras → kilos, etc.) si se puede.
+                    const q = to ? convertQty(l.quantity, l.unit, to.unit) : null;
+                    update(l.key, { target: v, ...(to ? { unit: to.unit, name: to.name, ...(q !== null ? { quantity: q } : {}) } : {}) });
+                  }}
                 />
                 {ing && ing.unit !== l.unit ? (
                   <Label size={12} color={t.danger}>Ese insumo se cuenta en {unitName(ing.unit)}: revisa que la cantidad esté en esa unidad.</Label>

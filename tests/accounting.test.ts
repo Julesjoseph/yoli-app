@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPayables, buildStatement, periodRange } from '../src/lib/accounting.ts';
+import { buildPayables, buildStatement, periodRange, weekStart } from '../src/lib/accounting.ts';
 
 const order = (o: Partial<Parameters<typeof buildStatement>[0]['orders'][number]>) => ({
   id: 'x', channel: 'local', status: 'pagada', total: 0, tip_law: 0, itbis: 0, platform_commission: 0, net_income: 0,
@@ -68,6 +68,12 @@ test('períodos', () => {
   assert.equal(periodRange('mes', now).toKey, '2026-11-16');
   assert.equal(periodRange('mes_pasado', now).fromKey, '2026-10-01');
   assert.equal(periodRange('mes_pasado', now).toKey, '2026-11-01');
-  assert.equal(periodRange('semana', now).fromKey, '2026-11-09'); // lunes
+  assert.equal(periodRange('semana', now).fromKey, '2026-11-11'); // miércoles
+  // Semana de miércoles a martes
+  const k = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  assert.equal(k(weekStart(new Date(2026, 10, 11, 0, 5))), '2026-11-11', 'el miércoles empieza semana');
+  assert.equal(k(weekStart(new Date(2026, 10, 17, 23, 59))), '2026-11-11', 'el martes cierra la semana');
+  assert.equal(k(weekStart(new Date(2026, 10, 18))), '2026-11-18');
+  assert.equal(k(weekStart(new Date(2026, 10, 10))), '2026-11-4');
   assert.equal(periodRange('anio', now).fromKey, '2026-01-01');
 });
