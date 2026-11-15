@@ -50,7 +50,22 @@ export interface Expense {
   description: string | null;
   amount: number;
   spent_at: string;
+  created_at: string;
+  ncf: string | null;
+  supplier_rnc: string | null;
+  supplier_name: string | null;
+  /** 1 = anulado (no cuenta, queda en la auditoría). */
+  voided: number;
+  void_reason: string | null;
+  voided_at: string | null;
+  /** 0 = a crédito, todavía se le debe al proveedor. */
+  paid: number;
+  due_date: string | null;
+  paid_at: string | null;
 }
+
+export const EXPENSE_SELECT =
+  'id, category, description, amount, spent_at, created_at, ncf, supplier_rnc, supplier_name, voided, void_reason, voided_at, paid, due_date, paid_at';
 export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'plataforma' | 'credito';
 
 /** Fecha local (AAAA-MM-DD), no UTC: en RD son 4 horas de diferencia. */
@@ -428,9 +443,26 @@ export const listStock = (db: SQLiteDatabase, ctx: Context) =>
 export async function addExpense(
   db: SQLiteDatabase,
   ctx: Context,
-  input: { category: string; description?: string; amount: number; ncf?: string; supplierRnc?: string; spentAt?: string | null },
+  input: {
+    category: string;
+    description?: string;
+    amount: number;
+    ncf?: string;
+    supplierRnc?: string;
+    spentAt?: string | null;
+    supplierName?: string | null;
+    /** false = a crédito (cuenta por pagar). */
+    paid?: boolean;
+    dueDate?: string | null;
+  },
 ) {
   const now = new Date();
+  const paid = input.paid ?? true;
+  const extra = {
+    supplier_name: input.supplierName?.trim() || null,
+    paid: paid ? 1 : 0,
+    due_date: paid ? null : input.dueDate || null,
+  };
   const exp = {
     id: randomUUID(),
     business_id: ctx.businessId,
@@ -445,21 +477,39 @@ export async function addExpense(
   };
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO expenses (id, business_id, location_id, category, description, amount, supplier_rnc, ncf, spent_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO expenses (id, business_id, location_id, category, description, amount, supplier_rnc, ncf, spent_at, created_at,
+         supplier_name, paid, due_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [exp.id, exp.business_id, exp.location_id, exp.category, exp.description, exp.amount, exp.supplier_rnc, exp.ncf,
-        exp.spent_at, exp.created_at],
+        exp.spent_at, exp.created_at, extra.supplier_name, extra.paid, extra.due_date],
     );
-    await enqueue(db, 'expenses', exp, ctx);
+    // Las columnas nuevas (0019) solo se suben si tienen valor: así sigue funcionando aunque la nube no las tenga.
+    const cloud: Record<string, unknown> = { ...exp };
+    if (extra.supplier_name) cloud.supplier_name = extra.supplier_name;
+    if (!paid) {
+      cloud.paid = false;
+      cloud.due_date = extra.due_date;
+    }
+    await enqueue(db, 'expenses', cloud, ctx);
   });
   return exp;
 }
 
 export const listExpenses = (db: SQLiteDatabase, ctx: Context, limit = 50) =>
   db.getAllAsync<Expense>(
-    'SELECT id, category, description, amount, spent_at FROM expenses WHERE location_id = ? ORDER BY created_at DESC LIMIT ?',
+    `SELECT ${EXPENSE_SELECT} FROM expenses WHERE location_id = ? ORDER BY spent_at DESC, created_at DESC LIMIT ?`,
     [ctx.locationId, limit],
   );
+
+/** Total gastado en un mes (AAAA-MM) en este local, sin los anulados. */
+export async function monthExpenses(db: SQLiteDatabase, ctx: Context, month: string) {
+  const r = await db.getFirstAsync<{ total: number; pending: number }>(
+    `SELECT COALESCE(SUM(amount), 0) AS total, COALESCE(SUM(CASE WHEN paid = 0 THEN amount ELSE 0 END), 0) AS pending
+       FROM expenses WHERE location_id = ? AND voided = 0 AND spent_at >= ? AND spent_at < ?`,
+    [ctx.locationId, `${month}-01`, `${month}-32`],
+  );
+  return { total: r?.total ?? 0, pending: r?.pending ?? 0 };
+}
 
 export type Period = 'hoy' | 'semana' | 'mes';
 
@@ -485,7 +535,7 @@ export async function getReport(db: SQLiteDatabase, ctx: Context, period: Period
     [ctx.locationId, start.toISOString()],
   );
   const exp = await db.getFirstAsync<{ total: number }>(
-    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE location_id = ? AND spent_at >= ?',
+    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE location_id = ? AND voided = 0 AND spent_at >= ?',
     [ctx.locationId, localDate(start)],
   );
   const topProducts = await db.getAllAsync<{ name: string; qty: number; amount: number }>(

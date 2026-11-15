@@ -14,7 +14,7 @@ import { getSetting, setSettings } from '@/db/database';
 import { getAiScanStatus, savePurchase, scanInvoice, type InvoiceFile } from '@/db/purchases';
 import { canManage, useBusiness } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { formatRD, round2 } from '@/lib/calc';
+import { formatRD, round2, parseAmount } from '@/lib/calc';
 import { cleanDate, cleanNcf, cleanRnc, invoiceTotal, matchIngredient, toPurchaseLines, type PurchaseLine, type ScannedInvoice } from '@/lib/invoice-scan';
 import { parseInvoiceText, type TextCandidate } from '@/lib/invoice-text';
 import { unitName, UNITS } from '@/lib/units';
@@ -71,6 +71,8 @@ export default function ScanInvoiceScreen() {
   const [candidates, setCandidates] = useState<TextCandidate[]>([]);
   const [aiChosen, setAiChosen] = useState(false);
   const [ai, setAi] = useState<{ used: number; limit: number } | null>(null);
+  const [credit, setCredit] = useState<'pagada' | 'credito'>('pagada');
+  const [due, setDue] = useState('');
   useEffect(() => {
     void getSetting(db, AI_KEY).then((v) => setAiChosen(v === '1'));
     void getAiScanStatus(ctx).then(setAi);
@@ -196,12 +198,14 @@ export default function ScanInvoiceScreen() {
 
   const update = (key: string, change: Partial<PurchaseLine>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...change } : l)));
   const linesTotal = round2(lines.reduce((n, l) => n + l.cost, 0));
-  const total = Number(header.total.replace(/,/g, '')) || 0;
+  const total = parseAmount(header.total) || 0;
   const toStock = lines.filter((l) => l.target !== 'no');
 
   async function save() {
     const date = header.date.trim();
     if (date && !cleanDate(date)) return Alert.alert('Revisa la fecha', 'Escríbela así: 2026-11-14 (año-mes-día) y que no sea en el futuro.');
+    if (credit === 'credito' && !header.supplier.trim()) return Alert.alert('Falta el proveedor', 'Escribe a quién se le debe la factura.');
+    if (credit === 'credito' && due.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(due.trim())) return Alert.alert('Revisa la fecha en que vence', 'Escríbela así: 2026-12-15 (año-mes-día).');
     setPhase('guardando');
     try {
       const r = await savePurchase(db, ctx, {
@@ -211,6 +215,8 @@ export default function ScanInvoiceScreen() {
         date: date || null,
         total,
         lines,
+        paid: credit === 'pagada',
+        dueDate: credit === 'credito' ? due.trim() || null : null,
       });
       Alert.alert('✅ Factura registrada', `Gasto de ${formatRD(total)}${r.stocked ? ` y ${r.stocked} ${r.stocked === 1 ? 'producto' : 'productos'} al inventario` : ''}.`);
       router.back();
@@ -308,6 +314,18 @@ export default function ScanInvoiceScreen() {
         <Label muted size={13}>
           Productos {formatRD(linesTotal)}{itbis ? ` · ITBIS ${formatRD(itbis)}` : ''}. Se guarda como gasto de Insumos.
         </Label>
+        <Label muted size={12} bold>¿YA SE PAGÓ?</Label>
+        <Chips
+          options={[
+            { value: 'pagada', label: 'Sí, pagada', icon: 'cash-check' },
+            { value: 'credito', label: 'A crédito (por pagar)', icon: 'clock-outline' },
+          ]}
+          value={credit}
+          onChange={setCredit}
+        />
+        {credit === 'credito' ? (
+          <Field label="Vence (AAAA-MM-DD, opcional)" icon="calendar-alert" value={due} onChangeText={setDue} placeholder="2026-12-15" />
+        ) : null}
       </Card>
 
       <SectionTitle icon="package-variant">{`Productos · ${toStock.length} al inventario`}</SectionTitle>
@@ -334,10 +352,10 @@ export default function ScanInvoiceScreen() {
                 <Field label="Nombre en el inventario" icon="tag-outline" value={l.name} onChangeText={(v) => update(l.key, { name: v })} />
                 <Row style={{ gap: 10 }}>
                   <View style={{ flex: 1 }}>
-                    <Field label="Cantidad" keyboardType="decimal-pad" value={String(l.quantity)} onChangeText={(v) => update(l.key, { quantity: Number(v.replace(',', '.')) || 0 })} />
+                    <Field label="Cantidad" keyboardType="decimal-pad" value={String(l.quantity)} onChangeText={(v) => update(l.key, { quantity: parseAmount(v) || 0 })} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Field label="Costo RD$" keyboardType="decimal-pad" value={String(l.cost)} onChangeText={(v) => update(l.key, { cost: Number(v.replace(/,/g, '')) || 0 })} />
+                    <Field label="Costo RD$" keyboardType="decimal-pad" value={String(l.cost)} onChangeText={(v) => update(l.key, { cost: parseAmount(v) || 0 })} />
                   </View>
                 </Row>
                 <Chips scroll options={UNITS.map((u) => ({ value: u.value, label: u.many }))} value={l.unit} onChange={(u) => update(l.key, { unit: u })} />

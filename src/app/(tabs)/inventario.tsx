@@ -9,7 +9,7 @@ import { addStock, type StockRow } from '@/db/repo';
 import { listStock } from '@/db/repo';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { formatRD } from '@/lib/calc';
+import { formatRD, parseAmount } from '@/lib/calc';
 import { unitName } from '@/lib/units';
 
 type Reason = 'compra' | 'merma' | 'ajuste';
@@ -33,7 +33,7 @@ export default function InventoryScreen() {
 
   async function save() {
     if (!editing) return;
-    const n = Number(qty.replace(',', '.'));
+    const n = parseAmount(qty);
     if (!Number.isFinite(n) || n <= 0) return Alert.alert('Cantidad inválida');
     await addStock(db, ctx, editing.id, reason === 'compra' ? n : -n, reason);
     setEditing(null);

@@ -9,7 +9,7 @@ import { loadDemoActivity } from './demo';
  * Las columnas tienen los mismos nombres que en Supabase para que la
  * sincronización envíe las filas tal cual.
  */
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 const V7_TABLES = `
     CREATE TABLE IF NOT EXISTS shopping_items (
@@ -61,6 +61,20 @@ export async function migrate(db: SQLiteDatabase) {
     }
     // v7: lista de compras y ventas a crédito
     if (current < 7) await db.execAsync(`ALTER TABLE orders ADD COLUMN customer_id TEXT;${V7_TABLES}`);
+    // v8: anulaciones (auditoría) y gastos por pagar
+    if (current < 8) {
+      await db.execAsync(`
+        ALTER TABLE orders ADD COLUMN void_reason TEXT;
+        ALTER TABLE orders ADD COLUMN voided_at TEXT;
+        ALTER TABLE expenses ADD COLUMN voided INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE expenses ADD COLUMN void_reason TEXT;
+        ALTER TABLE expenses ADD COLUMN voided_at TEXT;
+        ALTER TABLE expenses ADD COLUMN supplier_name TEXT;
+        ALTER TABLE expenses ADD COLUMN paid INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE expenses ADD COLUMN due_date TEXT;
+        ALTER TABLE expenses ADD COLUMN paid_at TEXT;
+      `);
+    }
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     return;
   }
@@ -108,7 +122,8 @@ export async function migrate(db: SQLiteDatabase) {
       external_ref TEXT, status TEXT NOT NULL DEFAULT 'pagada', subtotal REAL NOT NULL, itbis REAL NOT NULL,
       tip_law REAL NOT NULL DEFAULT 0, total REAL NOT NULL, platform_commission REAL NOT NULL DEFAULT 0,
       net_income REAL NOT NULL, payment_method TEXT, created_at TEXT NOT NULL,
-      discount REAL NOT NULL DEFAULT 0, cash_received REAL, change_given REAL, customer_id TEXT
+      discount REAL NOT NULL DEFAULT 0, cash_received REAL, change_given REAL, customer_id TEXT,
+      void_reason TEXT, voided_at TEXT
     );
     CREATE INDEX IF NOT EXISTS orders_by_date ON orders (location_id, created_at);
     CREATE TABLE IF NOT EXISTS order_items (
@@ -118,7 +133,8 @@ export async function migrate(db: SQLiteDatabase) {
     CREATE TABLE IF NOT EXISTS expenses (
       id TEXT PRIMARY KEY, business_id TEXT NOT NULL, location_id TEXT, category TEXT NOT NULL,
       description TEXT, amount REAL NOT NULL, supplier_rnc TEXT, ncf TEXT, spent_at TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL, voided INTEGER NOT NULL DEFAULT 0, void_reason TEXT, voided_at TEXT,
+      supplier_name TEXT, paid INTEGER NOT NULL DEFAULT 1, due_date TEXT, paid_at TEXT
     );
 
     -- Cola de cambios pendientes de subir a Supabase (funciona sin internet)

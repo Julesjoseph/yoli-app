@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { Button, Card, Chips, Divider, EmptyState, Field, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle } from '@/components/ui';
+import { VoidBox } from '@/components/void-box';
+import { voidSale } from '@/db/accounting';
 import { CHANNEL_ICONS } from '@/components/brand-icons';
 import { ChannelColors } from '@/constants/theme';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
@@ -40,10 +42,15 @@ export default function SaleScreen() {
 
   const [data, reload] = useFocusData(async () => {
     const order = await getTicketOrder(db, id);
-    if (ctx.demo) return { order, invoices: [] as Invoice[], settings: null };
+    const state = await db.getFirstAsync<{ status: string; void_reason: string | null; voided_at: string | null }>(
+      'SELECT status, void_reason, voided_at FROM orders WHERE id = ?',
+      [id],
+    );
+    if (ctx.demo) return { order, state, invoices: [] as Invoice[], settings: null };
     const [invoices, settings] = await Promise.all([listInvoices(id), getEinvoiceSettings(ctx.businessId)]);
-    return { order, invoices, settings };
+    return { order, state, invoices, settings };
   }, [db, id]);
+  const voided = data?.state?.status === 'anulada';
 
   const order = data?.order;
   const valid = (data?.invoices ?? []).filter((i) => i.status === 'aceptada' || i.status === 'enviada');
@@ -103,6 +110,17 @@ export default function SaleScreen() {
 
   return (
     <Screen back title={order ? `Venta #${ticketNumber(order.id)}` : 'Venta'} subtitle={order ? new Date(order.created_at).toLocaleString('es-DO') : undefined}>
+      {voided ? (
+        <Card style={{ gap: 6, backgroundColor: t.dangerSoft }}>
+          <Row style={{ justifyContent: 'flex-start', gap: 8 }}>
+            <Icon name="cancel" color={t.danger} size={20} />
+            <Label bold size={16} color={t.danger}>Venta anulada</Label>
+          </Row>
+          <Label size={14} color={t.danger}>Motivo: {data?.state?.void_reason || '—'}</Label>
+          {data?.state?.voided_at ? <Label muted size={13}>{new Date(data.state.voided_at).toLocaleString('es-DO')}</Label> : null}
+          <Label muted size={13}>No cuenta en ventas ni reportes. Lo que sacó del inventario volvió a entrar. Queda en la auditoría.</Label>
+        </Card>
+      ) : null}
       {order ? (
         <Card style={{ gap: 10 }}>
           <Row style={{ justifyContent: 'flex-start', gap: 12 }}>
@@ -127,6 +145,8 @@ export default function SaleScreen() {
         </Card>
       ) : null}
 
+      {voided && !valid.length ? null : (
+        <>
       <SectionTitle icon="file-certificate-outline">Factura electrónica</SectionTitle>
       {ctx.demo ? (
         <Card>
@@ -241,6 +261,31 @@ export default function SaleScreen() {
           />
         </Card>
       )}
+        </>
+      )}
+      {order && !voided && canManage(ctx) ? (
+        <>
+          <SectionTitle icon="cancel">¿Se entró por error?</SectionTitle>
+          {valid.some((i) => i.environment !== 'prueba') ? (
+            <Card>
+              <Label size={14}>
+                Esta venta tiene una factura electrónica enviada a la DGII. Para anularla hay que emitir una nota de crédito (E34) en tu proveedor de facturación.
+              </Label>
+            </Card>
+          ) : (
+            <VoidBox
+              what="esta venta"
+              reasons={['Se cobró dos veces', 'Error en la orden', 'El cliente no la pagó']}
+              warning={order.payment_method === 'credito' ? 'Es a crédito: el cliente dejará de deber este monto.' : undefined}
+              onVoid={async (reason) => {
+                await voidSale(db, ctx, id, reason);
+                setMsg({ text: 'Venta anulada. Quedó en la auditoría.', ok: true });
+                reload();
+              }}
+            />
+          )}
+        </>
+      ) : null}
       {lastRejected?.message && !msg ? (
         <Card style={{ gap: 4 }}>
           <Label bold size={14} color={t.danger}>La última vez fue rechazada ({lastRejected.encf})</Label>

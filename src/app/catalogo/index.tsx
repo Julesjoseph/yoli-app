@@ -18,12 +18,12 @@ import {
 } from '@/db/catalog';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { formatRD } from '@/lib/calc';
+import { formatRD, parseAmount } from '@/lib/calc';
 import { unitName } from '@/lib/units';
 
 type Tab = 'productos' | 'insumos' | 'categorias';
 
-const num = (s: string) => Number(s.replace(',', '.'));
+const num = (s: string) => parseAmount(s);
 
 export default function CatalogScreen() {
   const db = useSQLiteContext();

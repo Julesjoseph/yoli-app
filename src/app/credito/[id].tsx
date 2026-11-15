@@ -17,7 +17,7 @@ import {
 } from '@/db/credit';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { formatRD } from '@/lib/calc';
+import { formatRD, parseAmount } from '@/lib/calc';
 
 const METHODS: { value: CreditPayMethod; label: string; icon: 'cash' | 'credit-card' | 'bank-transfer' }[] = [
   { value: 'efectivo', label: 'Efectivo', icon: 'cash' },
@@ -62,7 +62,7 @@ export default function CustomerScreen() {
 
   const pay = () =>
     run(async () => {
-      const n = Number(amount.replace(/,/g, ''));
+      const n = parseAmount(amount);
       const r = await addCustomerPayment(db, ctx, { customerId: id, amount: n, method, note });
       setAmount('');
       setNote('');
@@ -90,7 +90,7 @@ export default function CustomerScreen() {
 
   const wa = c ? whatsappReminder(c, ctx.businessName) : null;
   const owes = (c?.balance ?? 0) > 0;
-  const n = Number(amount.replace(/,/g, '')) || 0;
+  const n = parseAmount(amount) || 0;
 
   return (
     <Screen back title={c?.name ?? 'Cliente'} subtitle={ctx.locationName}>
@@ -178,7 +178,7 @@ export default function CustomerScreen() {
                       phone: form.phone,
                       rnc: c?.rnc ?? undefined,
                       note: c?.note ?? undefined,
-                      creditLimit: manager ? Number(form.limit.replace(/,/g, '')) || null : c?.credit_limit ?? null,
+                      creditLimit: manager ? parseAmount(form.limit) || null : c?.credit_limit ?? null,
                     });
                     setEditing(false);
                   })

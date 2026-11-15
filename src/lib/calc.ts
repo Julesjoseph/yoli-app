@@ -170,3 +170,27 @@ export function buildProfitReport(orders: OrderForReport[], expenseTotal: number
 
 export const formatRD = (n: number) =>
   'RD$ ' + n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * Lee un número escrito a mano: "1,250.50", "1250.50", "1.250,50", "1250,5", "1,250" (mil doscientos
+ * cincuenta) o "RD$ 300". Antes "1,250" se leía como 1.25. Devuelve NaN si no es un número.
+ */
+export function parseAmount(raw: string | null | undefined): number {
+  let s = String(raw ?? '').replace(/RD\$|\$|\s/gi, '');
+  if (!s) return NaN;
+  const neg = s.startsWith('-');
+  if (neg) s = s.slice(1);
+  const comma = s.lastIndexOf(',');
+  const dot = s.lastIndexOf('.');
+  if (comma >= 0 && dot >= 0) {
+    // El último separador es el de los decimales.
+    s = comma > dot ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  } else if (comma >= 0) {
+    s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : s.replace(',', '.');
+  } else if (/^\d{1,3}(\.\d{3}){2,}$/.test(s)) {
+    s = s.replace(/\./g, '');
+  }
+  if (!/^\d*\.?\d+$|^\d+\.$/.test(s)) return NaN;
+  const n = Number(s);
+  return neg ? -n : n;
+}

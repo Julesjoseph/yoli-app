@@ -156,7 +156,7 @@ export default function SalesScreen() {
       </Card>
 
       <Card style={{ gap: 6 }}>
-        <Row><Label>Ventas</Label><Label bold size={18}>{formatRD(gross)}</Label></Row>
+        <Row><Label>Cobrado</Label><Label bold size={18}>{formatRD(gross)}</Label></Row>
         <Row><Label muted>Órdenes</Label><Label muted>{paid.length}{filtered.length > paid.length ? ` (+${filtered.length - paid.length} anuladas)` : ''}</Label></Row>
         <Row><Label muted>Ticket promedio</Label><Label muted>{formatRD(paid.length ? gross / paid.length : 0)}</Label></Row>
         {commission > 0 ? <Row><Label muted>Comisiones</Label><Label muted>{formatRD(commission)}</Label></Row> : null}

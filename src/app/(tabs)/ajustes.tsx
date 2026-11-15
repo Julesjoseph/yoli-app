@@ -15,6 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/sync/supabase';
 import { pullCatalog, pullLocationActivity } from '@/sync/pull';
 import { pushOutbox } from '@/sync/sync';
+import { parseAmount } from '@/lib/calc';
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || 'Y';
@@ -44,26 +45,50 @@ export default function SettingsScreen() {
   const [syncMsg, setSyncMsg] = useState('');
 
   const userName = (auth.session?.user.user_metadata?.name as string | undefined) ?? '';
-  const menu: { icon: IconName; label: string; hint: string; onPress: () => void }[] = [
-    { icon: 'card-account-details-outline', label: 'Perfil del negocio', hint: 'Logo, nombre comercial, RNC, teléfono y dirección', onPress: () => router.push('/negocio') },
-    { icon: 'storefront-outline', label: ctx.businessName, hint: ctx.demo ? `Local: ${ctx.locationName}` : `${ctx.locationName} · toca para cambiar de local`, onPress: () => { if (!ctx.demo) changeLocation(); } },
-    ...(manager
-      ? [
-          { icon: 'book-open-variant' as const, label: 'Catálogo', hint: 'Productos, fotos, precios y recetas', onPress: () => router.push('/catalogo') },
-          { icon: 'receipt-text-outline' as const, label: 'Gastos', hint: 'Compras, nómina y servicios', onPress: () => router.push('/gastos') },
-          { icon: 'chart-box-outline' as const, label: 'Reportes', hint: 'Ventas, costos y ganancia', onPress: () => router.push('/reportes') },
-          { icon: 'file-certificate-outline' as const, label: 'Factura electrónica', hint: 'e-CF de la DGII con tu proveedor autorizado', onPress: () => router.push('/factura-electronica') },
-          { icon: 'moped-outline' as const, label: 'PedidosYa', hint: 'Enlaza tus locales para que los pedidos entren solos', onPress: () => router.push('/pedidosya') },
-        ]
-      : []),
-    { icon: 'package-variant', label: 'Inventario', hint: 'Stock e insumos del local', onPress: () => router.push('/inventario') },
-    { icon: 'cart-variant', label: 'Lista de compras', hint: 'Lo que hay que comprar, con recordatorio y voz', onPress: () => router.push('/compras') },
-    { icon: 'account-cash', label: 'Ventas a crédito', hint: 'Clientes que deben, abonos y WhatsApp', onPress: () => router.push('/credito') },
-    { icon: 'printer-pos', label: 'Impresora y ticket', hint: 'Datos del ticket y papel de 58 u 80 mm', onPress: () => router.push('/impresora') },
-    { icon: 'receipt-text-check-outline', label: 'Orden actual', hint: 'Ver la orden de la caja', onPress: () => router.push('/orden') },
-    ...(isAdmin
-      ? [{ icon: 'shield-crown-outline' as const, label: 'Clientes de YOLI', hint: 'Suscripciones y actividad de cada negocio', onPress: () => router.push('/admin') }]
-      : []),
+  type Item = { icon: IconName; label: string; hint: string; onPress: () => void };
+  const go = (href: Parameters<typeof router.push>[0]) => () => router.push(href);
+  const groups: { title: string; icon: IconName; items: (Item | false)[] }[] = [
+    {
+      title: 'Dinero',
+      icon: 'cash-multiple',
+      items: [
+        manager && { icon: 'scale-balance', label: 'Contabilidad', hint: 'Ganancia, por cobrar, por pagar, PDF y Excel', onPress: go('/contabilidad') },
+        { icon: 'receipt', label: 'Historial de ventas', hint: 'Todas las ventas, buscar y anular', onPress: go('/ventas') },
+        manager && { icon: 'receipt-text-outline', label: 'Gastos', hint: 'Registrar, escanear facturas y pagar', onPress: go('/gastos') },
+        { icon: 'account-cash', label: 'Ventas a crédito', hint: 'Clientes que deben, abonos y WhatsApp', onPress: go('/credito') },
+        manager && { icon: 'chart-box-outline', label: 'Reportes', hint: 'Ventas por canal y más vendidos', onPress: go('/reportes') },
+        manager && { icon: 'shield-search', label: 'Auditoría', hint: 'Ventas y gastos anulados', onPress: go('/auditoria') },
+      ],
+    },
+    {
+      title: 'Inventario y compras',
+      icon: 'package-variant',
+      items: [
+        { icon: 'package-variant', label: 'Inventario', hint: 'Stock e insumos del local', onPress: go('/inventario') },
+        { icon: 'cart-variant', label: 'Lista de compras', hint: 'Lo que hay que comprar, con recordatorio y voz', onPress: go('/compras') },
+        manager && { icon: 'line-scan', label: 'Escanear factura de compra', hint: 'Pasa los productos al inventario', onPress: go('/escanear-factura') },
+      ],
+    },
+    {
+      title: 'Menú y ventas',
+      icon: 'silverware-fork-knife',
+      items: [
+        manager && { icon: 'book-open-variant', label: 'Catálogo', hint: 'Productos, fotos, precios y recetas', onPress: go('/catalogo') },
+        { icon: 'receipt-text-check-outline', label: 'Orden actual', hint: 'Ver la orden de la caja', onPress: go('/orden') },
+        manager && { icon: 'file-certificate-outline', label: 'Factura electrónica', hint: 'e-CF de la DGII con tu proveedor autorizado', onPress: go('/factura-electronica') },
+        manager && { icon: 'moped-outline', label: 'PedidosYa', hint: 'Enlazar locales e importar ventas', onPress: go('/pedidosya') },
+      ],
+    },
+    {
+      title: 'Negocio',
+      icon: 'storefront-outline',
+      items: [
+        { icon: 'card-account-details-outline', label: 'Perfil del negocio', hint: 'Logo, nombre comercial, RNC, teléfono y dirección', onPress: go('/negocio') },
+        { icon: 'storefront-outline', label: ctx.businessName, hint: ctx.demo ? `Local: ${ctx.locationName}` : `${ctx.locationName} · toca para cambiar de local`, onPress: () => { if (!ctx.demo) changeLocation(); } },
+        { icon: 'printer-pos', label: 'Impresora y ticket', hint: 'Datos del ticket y papel de 58 u 80 mm', onPress: go('/impresora') },
+        isAdmin && { icon: 'shield-crown-outline', label: 'Clientes de YOLI', hint: 'Suscripciones y actividad de cada negocio', onPress: go('/admin') },
+      ],
+    },
   ];
   const trialDays = plan?.trialEndsAt ? Math.max(0, Math.ceil((new Date(plan.trialEndsAt).getTime() - Date.now()) / 86_400_000)) : 0;
 
@@ -111,24 +136,33 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      <Card style={{ gap: 0, paddingVertical: 6 }}>
-        {menu.map((item, i) => (
-          <Pressable
-            key={item.label}
-            accessibilityRole="button"
-            onPress={item.onPress}
-            style={[styles.menuRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}>
-            <View style={[styles.menuIcon, { backgroundColor: t.primarySoft }]}>
-              <Icon name={item.icon} size={20} color={t.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Label bold size={16}>{item.label}</Label>
-              <Label muted size={13} numberOfLines={1}>{item.hint}</Label>
-            </View>
-            <Icon name="chevron-right" color={t.textSecondary} />
-          </Pressable>
-        ))}
-      </Card>
+      {groups.map((g) => {
+        const items = g.items.filter((i): i is Item => !!i);
+        if (!items.length) return null;
+        return (
+          <View key={g.title} style={{ gap: 8 }}>
+            <SectionTitle icon={g.icon}>{g.title}</SectionTitle>
+            <Card style={{ gap: 0, paddingVertical: 6 }}>
+              {items.map((item, i) => (
+                <Pressable
+                  key={item.label}
+                  accessibilityRole="button"
+                  onPress={item.onPress}
+                  style={[styles.menuRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border }]}>
+                  <View style={[styles.menuIcon, { backgroundColor: t.primarySoft }]}>
+                    <Icon name={item.icon} size={20} color={t.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Label bold size={16}>{item.label}</Label>
+                    <Label muted size={13} numberOfLines={1}>{item.hint}</Label>
+                  </View>
+                  <Icon name="chevron-right" color={t.textSecondary} />
+                </Pressable>
+              ))}
+            </Card>
+          </View>
+        );
+      })}
 
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -220,8 +254,8 @@ function Commissions() {
 
   async function save() {
     const rows = [
-      { platform_id: 'pedidosya', commission_rate: Number(pya.replace(',', '.')) / 100 },
-      { platform_id: 'ubereats', commission_rate: Number(uber.replace(',', '.')) / 100 },
+      { platform_id: 'pedidosya', commission_rate: parseAmount(pya) / 100 },
+      { platform_id: 'ubereats', commission_rate: parseAmount(uber) / 100 },
     ];
     if (rows.some((r) => !Number.isFinite(r.commission_rate) || r.commission_rate < 0 || r.commission_rate >= 1)) {
       return setMsg('Escribe porcentajes entre 0 y 99.');

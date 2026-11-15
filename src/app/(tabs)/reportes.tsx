@@ -1,14 +1,16 @@
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { Text } from '@/components/text';
 
 import { CHANNEL_ICONS } from '@/components/brand-icons';
-import { Card, Chips, EmptyState, HeroCard, Icon, IconBadge, Label, ProgressBar, Row, Screen, SectionTitle, Stat } from '@/components/ui';
+import { Button, Card, Chips, EmptyState, HeroCard, Icon, IconBadge, Label, ProgressBar, Row, Screen, SectionTitle, Stat } from '@/components/ui';
 import { ChannelColors } from '@/constants/theme';
 import { getReport, type Period } from '@/db/repo';
-import { useBusiness, useFocusData } from '@/hooks/use-business';
+import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
+import { exportAccounting } from '@/printing/accounting-export';
 import { useTheme } from '@/hooks/use-theme';
 import { CHANNEL_LABELS, formatRD, type Channel } from '@/lib/calc';
 
@@ -27,11 +29,36 @@ export default function ReportsScreen() {
 
   const r = data?.report;
   const maxChannel = r ? Math.max(1, ...Object.values(r.byChannel).map((c) => c.gross)) : 1;
-  const margin = r && r.gross > 0 ? Math.round((r.profit / r.gross) * 100) : 0;
+  // Margen sobre las ventas sin ITBIS (el ITBIS no es del negocio).
+  const netSales = r ? r.gross - r.itbis : 0;
+  const margin = r && netSales > 0 ? Math.round((r.profit / netSales) * 100) : 0;
+  const manager = canManage(ctx);
+  const [busy, setBusy] = useState<'' | 'pdf' | 'excel'>('');
+  const [error, setError] = useState('');
+
+  async function download(kind: 'pdf' | 'excel') {
+    setBusy(kind);
+    setError('');
+    try {
+      await exportAccounting(db, ctx, kind, period);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+    setBusy('');
+  }
 
   return (
     <Screen title="Reportes" subtitle={ctx.locationName}>
       <Chips options={PERIODS} value={period} onChange={setPeriod} />
+      {manager ? (
+        <>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Button style={{ flex: 1 }} size="sm" variant="secondary" icon="file-pdf-box" title={busy === 'pdf' ? 'Creando…' : 'Descargar PDF'} disabled={!!busy} onPress={() => download('pdf')} />
+            <Button style={{ flex: 1 }} size="sm" variant="secondary" icon="microsoft-excel" title={busy === 'excel' ? 'Creando…' : 'Descargar Excel'} disabled={!!busy} onPress={() => download('excel')} />
+          </View>
+          {error ? <Label size={13} color={t.danger}>{error}</Label> : null}
+        </>
+      ) : null}
       {r ? (
         <>
           <HeroCard>
@@ -48,11 +75,24 @@ export default function ReportsScreen() {
           </HeroCard>
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-            <Stat icon="cash-multiple" label="Ventas" value={formatRD(r.gross)} color={t.success} />
+            <Stat icon="cash-multiple" label="Ventas (con ITBIS)" value={formatRD(r.gross)} color={t.success} />
             <Stat icon="moped" label="Comisiones" value={formatRD(r.commissions)} color={ChannelColors.pedidosya} />
             <Stat icon="bank" label="ITBIS a la DGII" value={formatRD(r.itbis)} color={t.info} />
             <Stat icon="receipt-text-outline" label="Gastos" value={formatRD(r.expenses)} color={t.accent} />
           </View>
+
+          {manager ? (
+            <Pressable onPress={() => router.push('/contabilidad')} accessibilityRole="button">
+              <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <IconBadge name="scale-balance" color={t.primary} size={38} />
+                <View style={{ flex: 1 }}>
+                  <Label bold size={15}>Contabilidad completa</Label>
+                  <Label muted size={13}>Estado de resultados, por cobrar, por pagar y meses anteriores</Label>
+                </View>
+                <Icon name="chevron-right" color={t.textSecondary} />
+              </Card>
+            </Pressable>
+          ) : null}
 
           <SectionTitle icon="chart-box">Ventas por canal</SectionTitle>
           <Card style={{ gap: 16 }}>

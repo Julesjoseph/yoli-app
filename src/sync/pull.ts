@@ -65,7 +65,16 @@ export async function pullCatalog(db: SQLiteDatabase, businessId: string) {
 const ORDER_COLUMNS = [
   'id', 'business_id', 'location_id', 'channel', 'external_ref', 'status', 'subtotal', 'itbis', 'tip_law', 'total',
   'platform_commission', 'net_income', 'payment_method', 'created_at', 'discount', 'cash_received', 'change_given', 'customer_id',
+  'void_reason', 'voided_at',
 ];
+
+export const EXPENSE_COLUMNS = [
+  'id', 'business_id', 'location_id', 'category', 'description', 'amount', 'supplier_rnc', 'ncf', 'spent_at', 'created_at',
+  'voided', 'void_reason', 'voided_at', 'supplier_name', 'paid', 'due_date', 'paid_at',
+];
+
+/** Gastos de la nube con valores por defecto (por si aún no se corrió 0019). */
+export const withExpenseDefaults = (e: Row) => ({ ...e, voided: e.voided ?? false, paid: e.paid ?? true });
 
 /**
  * Trae lo que se vendió/gastó en este local desde otros equipos (últimos 35 días,
@@ -100,9 +109,7 @@ export async function pullLocationActivity(db: SQLiteDatabase, businessId: strin
 
     await insertRows(db, 'orders', orders.map((o) => ({ ...o, discount: o.discount ?? 0 })), ORDER_COLUMNS);
     await insertRows(db, 'order_items', items, ['id', 'order_id', 'product_id', 'name', 'unit_price', 'quantity']);
-    await insertRows(db, 'expenses', expenses, [
-      'id', 'business_id', 'location_id', 'category', 'description', 'amount', 'supplier_rnc', 'ncf', 'spent_at', 'created_at',
-    ]);
+    await insertRows(db, 'expenses', expenses.map(withExpenseDefaults), EXPENSE_COLUMNS);
     // El stock de la nube entra como un solo movimiento por insumo (no se vuelve a subir).
     const now = new Date().toISOString();
     for (const s of stock) {

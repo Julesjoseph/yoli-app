@@ -25,7 +25,7 @@ import {
 } from '@/db/catalog';
 import { useBusiness } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { formatRD } from '@/lib/calc';
+import { formatRD, parseAmount } from '@/lib/calc';
 import { unitName } from '@/lib/units';
 
 const GROUP_SUGGESTIONS = ['Acompañante', 'Bebida', 'Salsa', 'Proteína'];
@@ -41,7 +41,7 @@ const ITBIS = [
   { value: '0', label: 'Exento' },
 ];
 
-const num = (s: string) => Number(s.replace(',', '.'));
+const num = (s: string) => parseAmount(s);
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();

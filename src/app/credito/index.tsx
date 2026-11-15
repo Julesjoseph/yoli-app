@@ -9,7 +9,7 @@ import { creditCloudReady, creditSummary, listCustomers, saveCustomer } from '@/
 import { localDate } from '@/db/repo';
 import { useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { formatRD } from '@/lib/calc';
+import { formatRD, parseAmount } from '@/lib/calc';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -32,7 +32,7 @@ export default function CreditScreen() {
 
   async function create() {
     try {
-      const id = await saveCustomer(db, ctx, { name, phone, creditLimit: Number(limit.replace(/,/g, '')) || null });
+      const id = await saveCustomer(db, ctx, { name, phone, creditLimit: parseAmount(limit) || null });
       setCreating(false);
       setName('');
       setPhone('');

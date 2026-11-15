@@ -15,7 +15,7 @@ import { recordSale, type PaymentMethod } from '@/db/repo';
 import { useBusiness } from '@/hooks/use-business';
 import { useCart } from '@/hooks/use-cart';
 import { useTheme } from '@/hooks/use-theme';
-import { CHANNEL_LABELS, DELIVERY_CHANNELS, formatRD, type Channel } from '@/lib/calc';
+import { CHANNEL_LABELS, DELIVERY_CHANNELS, formatRD, type Channel, parseAmount } from '@/lib/calc';
 import { getTicketSettings, printOrderTicket } from '@/printing/receipt';
 
 export const CHANNEL_OPTIONS = (Object.keys(CHANNEL_LABELS) as Channel[]).map((c) => ({
@@ -41,7 +41,7 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
   const [saving, setSaving] = useState(false);
   const isDelivery = DELIVERY_CHANNELS.includes(cart.channel);
   const cashMode = !isDelivery && cart.payment === 'efectivo';
-  const received = cashMode ? Number(cart.cashReceived.replace(/,/g, '')) || 0 : 0;
+  const received = cashMode ? parseAmount(cart.cashReceived) || 0 : 0;
   const short = received > 0 && received < cart.totals.total;
   const credit = !isDelivery && cart.payment === 'credito';
 
@@ -172,7 +172,7 @@ const BILLS = [100, 200, 500, 1000, 2000];
 function CashBox({ total }: { total: number }) {
   const cart = useCart();
   const t = useTheme();
-  const received = Number(cart.cashReceived.replace(/,/g, '')) || 0;
+  const received = parseAmount(cart.cashReceived) || 0;
   const change = received - total;
   const options = [
     { value: String(total), label: 'Exacto' },
@@ -238,7 +238,7 @@ function DiscountPicker() {
               { value: 'pct', label: 'Porcentaje %' },
             ]}
             value={kind}
-            onChange={(k) => cart.setDiscount({ kind: k, value: Number(text.replace(',', '.')) || 0 })}
+            onChange={(k) => cart.setDiscount({ kind: k, value: parseAmount(text) || 0 })}
           />
           <Field
             label={kind === 'monto' ? 'Descuento en RD$' : 'Descuento en %'}
@@ -247,7 +247,7 @@ function DiscountPicker() {
             value={text}
             onChangeText={(v) => {
               setText(v);
-              cart.setDiscount({ kind, value: Number(v.replace(',', '.')) || 0 });
+              cart.setDiscount({ kind, value: parseAmount(v) || 0 });
             }}
             placeholder="0"
           />

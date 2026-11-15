@@ -12,7 +12,7 @@ async function fromCloud(ctx: Context, since: Date) {
   if (!supabase) throw new Error('sin nube');
   const [orders, expenses, locations] = await Promise.all([
     supabase.from('orders').select(ORDER_COLS).eq('business_id', ctx.businessId).eq('status', 'pagada').gte('created_at', since.toISOString()),
-    supabase.from('expenses').select('location_id, amount, spent_at').eq('business_id', ctx.businessId).gte('spent_at', localDate(since)),
+    supabase.from('expenses').select('*').eq('business_id', ctx.businessId).gte('spent_at', localDate(since)),
     supabase.from('locations').select('id, name').eq('business_id', ctx.businessId).eq('active', true),
   ]);
   for (const r of [orders, expenses, locations]) if (r.error) throw new Error(r.error.message);
@@ -25,7 +25,10 @@ async function fromCloud(ctx: Context, since: Date) {
   }
   return {
     orders: (orders.data ?? []).map((o) => ({ ...o, total: Number(o.total), tip_law: Number(o.tip_law), itbis: Number(o.itbis), platform_commission: Number(o.platform_commission), net_income: Number(o.net_income) })) as DashOrder[],
-    expenses: (expenses.data ?? []).map((e) => ({ ...e, amount: Number(e.amount) })) as DashExpense[],
+    // Los gastos anulados no cuentan (select('*') para que funcione aunque la nube no tenga la columna voided).
+    expenses: (expenses.data ?? [])
+      .filter((e) => e.voided !== true)
+      .map((e) => ({ location_id: e.location_id, spent_at: e.spent_at, amount: Number(e.amount) })) as DashExpense[],
     items: items.map((i) => ({ ...i, quantity: Number(i.quantity), unit_price: Number(i.unit_price) })),
     locations: (locations.data ?? []) as { id: string; name: string }[],
   };
@@ -38,7 +41,7 @@ async function fromDevice(db: SQLiteDatabase, ctx: Context, since: Date) {
     [ctx.businessId, since.toISOString()],
   );
   const expenses = await db.getAllAsync<DashExpense>(
-    'SELECT location_id, amount, spent_at FROM expenses WHERE business_id = ? AND spent_at >= ?',
+    'SELECT location_id, amount, spent_at FROM expenses WHERE business_id = ? AND voided = 0 AND spent_at >= ?',
     [ctx.businessId, localDate(since)],
   );
   const items = await db.getAllAsync<DashItem>(

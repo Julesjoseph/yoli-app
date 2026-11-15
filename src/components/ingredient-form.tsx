@@ -7,10 +7,10 @@ import { saveIngredient, type CatalogIngredient } from '@/db/catalog';
 import { addStock } from '@/db/repo';
 import { useBusiness } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
-import { formatRD } from '@/lib/calc';
+import { formatRD, parseAmount } from '@/lib/calc';
 import { unitName, UNITS } from '@/lib/units';
 
-const num = (s: string) => Number(s.replace(',', '.'));
+const num = (s: string) => parseAmount(s);
 
 /**
  * Formulario sencillo de insumo: nombre, cómo se cuenta (piezas, libras…),

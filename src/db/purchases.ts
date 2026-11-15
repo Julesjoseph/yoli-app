@@ -5,6 +5,7 @@ import type { PurchaseLine, ScannedInvoice } from '@/lib/invoice-scan';
 import { supabase } from '@/sync/supabase';
 
 import { listCatalogIngredients, saveIngredient } from './catalog';
+import { expenseRef } from './accounting';
 import { addExpense, insertMovement, type Context } from './repo';
 
 /** Imagen o PDF de la factura, en base64. */
@@ -47,7 +48,17 @@ export async function scanInvoice(db: SQLiteDatabase, ctx: Context, file: Invoic
 export async function savePurchase(
   db: SQLiteDatabase,
   ctx: Context,
-  input: { supplier: string; rnc: string | null; ncf: string | null; date: string | null; total: number; lines: PurchaseLine[] },
+  input: {
+    supplier: string;
+    rnc: string | null;
+    ncf: string | null;
+    date: string | null;
+    total: number;
+    lines: PurchaseLine[];
+    /** false = a crédito (queda en cuentas por pagar). */
+    paid?: boolean;
+    dueDate?: string | null;
+  },
 ) {
   if (!(input.total > 0)) throw new Error('Revisa el total de la factura.');
   const stockLines = input.lines.filter((l) => l.target !== 'no' && l.quantity > 0 && l.name.trim());
@@ -71,7 +82,6 @@ export async function savePurchase(
   }
 
   // 2) El gasto y 3) la entrada al inventario.
-  const note = [input.supplier, input.ncf].filter(Boolean).join(' · ') || 'Factura escaneada';
   const exp = await addExpense(db, ctx, {
     category: 'insumos',
     description: `Factura ${input.supplier || 'de compra'}`.slice(0, 200),
@@ -79,8 +89,13 @@ export async function savePurchase(
     ncf: input.ncf ?? undefined,
     supplierRnc: input.rnc ?? undefined,
     spentAt: input.date,
+    supplierName: input.supplier || null,
+    paid: input.paid ?? true,
+    dueDate: input.dueDate ?? null,
   });
   const expenseId = exp.id;
+  // La nota lleva la referencia del gasto: si se anula, lo que entró sale del inventario.
+  const note = [input.supplier, input.ncf, expenseRef(expenseId)].filter(Boolean).join(' · ');
   await db.withTransactionAsync(async () => {
     for (const l of stockLines) {
       const id = ids.get(l.key);
