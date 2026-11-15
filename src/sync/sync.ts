@@ -42,7 +42,15 @@ export async function pushOutbox(db: SQLiteDatabase): Promise<SyncResult> {
     if (group.length === 0) continue;
     // Si una fila trae una columna y otra no (p. ej. "discount" solo cuando hay descuento),
     // la que no la trae usa el valor por defecto de la nube en vez de null.
-    const { error } = await supabase.from(table).upsert(group.map((r) => JSON.parse(r.payload)), { defaultToNull: false });
+    // La misma fila puede venir varias veces (p. ej. anotar y luego marcar comprado):
+    // la base no acepta repetidas en un mismo envío, así que se junta en la última versión.
+    const byId = new Map<string, Record<string, unknown>>();
+    group.forEach((r, i) => {
+      const row = JSON.parse(r.payload) as Record<string, unknown>;
+      const key = typeof row.id === 'string' ? row.id : `#${i}`;
+      byId.set(key, { ...byId.get(key), ...row });
+    });
+    const { error } = await supabase.from(table).upsert([...byId.values()], { defaultToNull: false });
     if (error) {
       await db.runAsync(
         `UPDATE outbox SET attempts = attempts + 1, last_error = ? WHERE seq IN (${group.map(() => '?').join(',')})`,
