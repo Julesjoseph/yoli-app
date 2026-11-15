@@ -29,6 +29,32 @@ export interface CartLine {
   itbisRate: number; // 0.18
 }
 
+/**
+ * El mismo producto con un extra cobrado encima del precio (en todos los canales).
+ * Sale en su propia línea de la orden y descuenta el inventario del producto original.
+ */
+export function withExtra<P extends { id: string; name: string; price: number; price_pedidosya?: number | null; price_ubereats?: number | null; base_id?: string; extra?: { amount: number; note: string } }>(
+  p: P,
+  amount: number,
+  note: string,
+): P {
+  const base = p.extra ? p.extra.amount : 0;
+  const total = Math.round((base + amount) * 100) / 100;
+  const label = [p.extra?.note, note.trim()].filter(Boolean).join(', ') || 'extra';
+  const baseName = p.extra ? p.name.slice(0, p.name.lastIndexOf(' + ')) || p.name : p.name;
+  const add = (v: number | null | undefined) => (v ? Math.round((v + amount) * 100) / 100 : v);
+  return {
+    ...p,
+    id: `${p.base_id && p.extra ? p.id.split('~')[0] : p.id}~${total}~${label}`,
+    base_id: p.base_id ?? p.id,
+    name: `${baseName} + ${label}`,
+    price: Math.round((p.price + amount) * 100) / 100,
+    price_pedidosya: add(p.price_pedidosya),
+    price_ubereats: add(p.price_ubereats),
+    extra: { amount: total, note: label },
+  };
+}
+
 /** Precio de un producto según el canal (PedidosYa y Uber Eats pueden tener su propio precio). */
 export function priceFor(
   p: { price: number; price_pedidosya?: number | null; price_ubereats?: number | null },

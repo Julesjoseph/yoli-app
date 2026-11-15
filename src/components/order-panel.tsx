@@ -54,6 +54,7 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
         paymentMethod: isDelivery ? 'plataforma' : cart.payment,
         externalRef: cart.externalRef,
         discount: cart.totals.discount,
+        applyTipLaw: cart.tipLaw,
         cashReceived: received || null,
         customerId: credit ? cart.customerId : null,
       });
@@ -98,6 +99,10 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
                   <Icon name="close" size={18} color={t.textSecondary} />
                 </Pressable>
               </Row>
+              {l.product.extra ? (
+                <Label muted size={12}>Incluye extra de {formatRD(l.product.extra.amount)} por unidad</Label>
+              ) : null}
+              <ExtraButton lineId={l.product.id} />
               <Row>
                 <Text style={{ color: t.primary, fontWeight: '900', fontSize: 15 }}>{formatRD(cart.priceOf(l.product) * l.quantity)}</Text>
                 <View style={[styles.stepper, { borderColor: t.border }]}>
@@ -142,8 +147,17 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
         ) : null}
         <Row><Label muted size={14}>Subtotal</Label><Label size={14}>{formatRD(cart.totals.subtotal)}</Label></Row>
         <Row><Label muted size={14}>ITBIS 18%</Label><Label size={14}>{formatRD(cart.totals.itbis)}</Label></Row>
-        {cart.totals.tipLaw > 0 ? (
-          <Row><Label muted size={14}>Propina legal 10%</Label><Label size={14}>{formatRD(cart.totals.tipLaw)}</Label></Row>
+        {cart.channel === 'local' ? (
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: cart.tipLaw }}
+            accessibilityLabel="Cobrar propina legal 10%"
+            onPress={() => cart.setTipLaw(!cart.tipLaw)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Icon name={cart.tipLaw ? 'checkbox-marked' : 'checkbox-blank-outline'} size={22} color={cart.tipLaw ? t.primary : t.textSecondary} />
+            <Label muted size={14} style={{ flex: 1 }}>Propina legal 10%{cart.tipLaw ? '' : ' (no se cobra)'}</Label>
+            <Label size={14} muted={!cart.tipLaw}>{formatRD(cart.totals.tipLaw)}</Label>
+          </Pressable>
         ) : null}
         <Divider />
         <Row>
@@ -161,6 +175,49 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
         onPress={charge}
         disabled={cart.lines.length === 0 || saving || short || (credit && !cart.customerId)}
       />
+    </View>
+  );
+}
+
+const QUICK_EXTRAS = [25, 50, 100];
+
+/** "Agregar extra": cobra algo más por un producto (ej. mangú con un poco más: +RD$50). */
+function ExtraButton({ lineId }: { lineId: string }) {
+  const cart = useCart();
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const value = parseAmount(amount) || 0;
+  if (!open) {
+    return (
+      <Pressable accessibilityRole="button" onPress={() => setOpen(true)} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }}>
+        <Icon name="plus-circle-outline" size={16} color={t.primary} />
+        <Label size={13} bold color={t.primary}>Agregar extra</Label>
+      </Pressable>
+    );
+  }
+  return (
+    <View style={{ gap: 8, padding: 10, borderRadius: 12, backgroundColor: t.backgroundElement }}>
+      <Label bold size={13}>Extra para 1 unidad</Label>
+      <Chips options={QUICK_EXTRAS.map((q) => ({ value: String(q), label: `+RD$${q}` }))} value={amount} onChange={setAmount} />
+      <Field label="Monto del extra (RD$)" icon="cash-plus" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} placeholder="50" />
+      <Field label="¿Qué lleva? (opcional)" icon="text" value={note} onChangeText={setNote} placeholder="Un poco más" />
+      <Row style={{ gap: 8 }}>
+        <Button size="sm" variant="ghost" title="Cancelar" onPress={() => setOpen(false)} />
+        <Button
+          size="sm"
+          icon="plus"
+          title={value > 0 ? `Agregar +${formatRD(value)}` : 'Agregar'}
+          disabled={!(value > 0)}
+          onPress={() => {
+            cart.addExtra(lineId, value, note);
+            setOpen(false);
+            setAmount('');
+            setNote('');
+          }}
+        />
+      </Row>
     </View>
   );
 }

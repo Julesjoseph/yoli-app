@@ -31,6 +31,7 @@ export default function CatalogScreen() {
   const t = useTheme();
   const [tab, setTab] = useState<Tab>('productos');
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
 
   const [data, reload] = useFocusData(async () => {
     const [products, categories, ingredients, recipes] = await Promise.all([
@@ -64,7 +65,9 @@ export default function CatalogScreen() {
     }
   }
 
-  const products = data?.products ?? [];
+  const allProducts = data?.products ?? [];
+  const q = plain(search.trim());
+  const products = q ? allProducts.filter((p) => plain(p.name).includes(q)) : allProducts;
   const categories = data?.categories ?? [];
   const ingredients = data?.ingredients ?? [];
 
@@ -72,7 +75,7 @@ export default function CatalogScreen() {
     <Screen back title="Catálogo" subtitle={ctx.businessName}>
       <Chips
         options={[
-          { value: 'productos', label: `Productos (${products.length})`, icon: 'food' },
+          { value: 'productos', label: `Productos (${allProducts.length})`, icon: 'food' },
           { value: 'insumos', label: `Insumos (${ingredients.length})`, icon: 'basket-outline' },
           { value: 'categorias', label: `Categorías (${categories.length})`, icon: 'shape-outline' },
         ]}
@@ -86,7 +89,11 @@ export default function CatalogScreen() {
           <Button icon="plus" title="Nuevo producto" onPress={() => router.push('/catalogo/producto')} />
           <Button variant="secondary" icon="image-multiple-outline" title="Poner fotos a varios productos" onPress={() => router.push('/catalogo/fotos')} />
           <Button variant="secondary" icon="moped-outline" title="Traer mi menú de PedidosYa" onPress={() => router.push('/importar-menu-pedidosya')} />
-          {products.length === 0 ? (
+          {allProducts.length ? (
+            <Field label="Buscar producto" icon="magnify" value={search} onChangeText={setSearch} placeholder="Escribe el nombre" />
+          ) : null}
+          {q && !products.length ? <EmptyState icon="magnify-close" text="No hay productos con ese nombre." /> : null}
+          {allProducts.length === 0 ? (
             <Card style={{ alignItems: 'center' }}>
               <EmptyState
                 icon="book-open-variant"
@@ -265,3 +272,5 @@ function Categories({ categories, onSaved }: { categories: { id: string; name: s
 const styles = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
 });
+
+const plain = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();

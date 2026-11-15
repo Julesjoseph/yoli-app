@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
 import type { PaymentMethod, Product } from '@/db/repo';
-import { computeOrderTotals, DELIVERY_CHANNELS, itbisFor, priceFor, round2, type Channel } from '@/lib/calc';
+import { computeOrderTotals, DELIVERY_CHANNELS, itbisFor, priceFor, round2, withExtra, type Channel } from '@/lib/calc';
 
 export interface Discount {
   kind: 'pct' | 'monto';
@@ -39,6 +39,11 @@ interface CartState {
   /** Cliente de la venta a crédito. */
   customerId: string | null;
   setCustomerId(id: string | null): void;
+  /** Cobrar la propina legal de 10 % (solo comedor). */
+  tipLaw: boolean;
+  setTipLaw(v: boolean): void;
+  /** Le pone un extra con precio a una unidad de esa línea (sale en su propia línea). */
+  addExtra(lineId: string, amount: number, note: string): void;
 }
 
 const CartContext = createContext<CartState | null>(null);
@@ -52,6 +57,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [discount, setDiscount] = useState<Discount>({ kind: 'pct', value: 0 });
   const [cashReceived, setCashReceived] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [tipLaw, setTipLaw] = useState(true);
 
   const lines = Object.values(items);
   const totals = useMemo(() => {
@@ -62,8 +68,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       : discount.kind === 'pct'
         ? round2((full * Math.min(discount.value, 100)) / 100)
         : discount.value;
-    return computeOrderTotals(cartLines, channel, { discount: amount });
-  }, [lines, channel, discount]);
+    return computeOrderTotals(cartLines, channel, { discount: amount, applyTipLaw: tipLaw });
+  }, [lines, channel, discount, tipLaw]);
 
   const value: CartState = {
     lines,
@@ -108,6 +114,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setCashReceived,
     customerId,
     setCustomerId,
+    tipLaw,
+    setTipLaw,
+    addExtra: (lineId, amount, note) =>
+      setItems((c) => {
+        const line = c[lineId];
+        if (!line || !(amount > 0)) return c;
+        const p = withExtra(line.product, amount, note);
+        const next = { ...c };
+        if (line.quantity > 1) next[lineId] = { ...line, quantity: line.quantity - 1 };
+        else delete next[lineId];
+        next[p.id] = { product: p, quantity: (c[p.id]?.quantity ?? 0) + 1 };
+        return next;
+      }),
   };
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

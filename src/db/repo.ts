@@ -32,6 +32,8 @@ export interface Product {
   /** En un combo ya armado: el producto real y los productos que eligió el cliente. */
   base_id?: string;
   chosen?: string[];
+  /** Extra que se cobra encima del precio (ej. "un poco más" de mangú por RD$50). */
+  extra?: { amount: number; note: string };
 }
 export interface Category {
   id: string;

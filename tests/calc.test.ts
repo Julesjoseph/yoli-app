@@ -89,3 +89,26 @@ test('ITBIS exento solo en delivery', async () => {
   assert.equal(t.itbis, 0);
   assert.equal(t.subtotal, 300);
 });
+
+test('extra encima del precio y propina opcional', async () => {
+  const { withExtra, computeOrderTotals } = await import('../src/lib/calc.ts');
+  const mangu = { id: 'm1', name: 'Mangú', price: 200, price_pedidosya: null, price_ubereats: 300 };
+  const x = withExtra(mangu, 50, 'Un poco más');
+  assert.equal(x.price, 250);
+  assert.equal(x.price_ubereats, 350);
+  assert.equal(x.base_id, 'm1', 'descuenta el inventario del mangú');
+  assert.equal(x.name, 'Mangú + Un poco más');
+  assert.notEqual(x.id, 'm1', 'va en su propia línea');
+  const y = withExtra(x, 25, 'huevo');
+  assert.equal(y.price, 275);
+  assert.equal(y.name, 'Mangú + Un poco más, huevo');
+  assert.equal(y.base_id, 'm1');
+  assert.equal(withExtra(mangu, 50, '').name, 'Mangú + extra');
+
+  const lines = [{ unitPrice: 250, quantity: 1, itbisRate: 0.18 }];
+  const con = computeOrderTotals(lines, 'local');
+  const sin = computeOrderTotals(lines, 'local', { applyTipLaw: false });
+  assert.ok(con.tipLaw > 0);
+  assert.equal(sin.tipLaw, 0);
+  assert.equal(sin.total, 250);
+});

@@ -8,7 +8,7 @@ import { Text } from '@/components/text';
 import { foodIcon } from '@/components/brand-icons';
 import { CHANNEL_OPTIONS, OrderPanel } from '@/components/order-panel';
 import { ProductImage } from '@/components/product-image';
-import { Button, Card, Chips, EmptyState, HeroCard, Icon, IconButton, Label, Screen, SectionTitle, useElevation } from '@/components/ui';
+import { Button, Card, Chips, EmptyState, Field, HeroCard, Icon, IconButton, Label, Screen, SectionTitle, useElevation } from '@/components/ui';
 import { listCategories, listProducts } from '@/db/repo';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useCart } from '@/hooks/use-cart';
@@ -26,10 +26,18 @@ export default function MenuScreen() {
 
   const [data] = useFocusData(async () => ({ products: await listProducts(db), categories: await listCategories(db) }), [db]);
   const [category, setCategory] = useState<string>('todas');
+  const [search, setSearch] = useState('');
 
-  const products = (data?.products ?? []).filter((p) => category === 'todas' || p.category_id === category);
-  const categoryName =
-    category === 'todas' ? 'Todo el menú' : (data?.categories.find((c) => c.id === category)?.name ?? 'Menú');
+  // Al buscar se busca en todo el menú (sin importar la categoría, acentos ni mayúsculas).
+  const q = plain(search.trim());
+  const products = (data?.products ?? []).filter((p) =>
+    q ? plain(p.name).includes(q) : category === 'todas' || p.category_id === category,
+  );
+  const categoryName = q
+    ? `Resultados para “${search.trim()}”`
+    : category === 'todas'
+      ? 'Todo el menú'
+      : (data?.categories.find((c) => c.id === category)?.name ?? 'Menú');
   const columns = isTablet ? 3 : width >= 600 ? 3 : 2;
   const tileWidth = `${(100 - (columns - 1) * 3.5) / columns}%` as const;
 
@@ -59,6 +67,8 @@ export default function MenuScreen() {
         </ScrollView>
       </HeroCard>
 
+      <Field label="Buscar producto" icon="magnify" value={search} onChangeText={setSearch} placeholder="Ej. mangú, pica pollo…" />
+
       <Chips
         scroll
         options={[
@@ -66,8 +76,13 @@ export default function MenuScreen() {
           ...(data?.categories ?? []).map((c) => ({ value: c.id, label: c.name, icon: foodIcon(c.name) })),
         ]}
         value={category}
-        onChange={setCategory}
+        onChange={(c) => {
+          setCategory(c);
+          setSearch('');
+        }}
       />
+
+      {q && data && !products.length ? <EmptyState icon="magnify-close" text="No hay productos con ese nombre." /> : null}
 
       {data && data.products.length === 0 ? (
         <Card style={{ alignItems: 'center' }}>
@@ -80,7 +95,7 @@ export default function MenuScreen() {
           ) : null}
         </Card>
       ) : (
-        <SectionTitle>{categoryName}</SectionTitle>
+        q && !products.length ? null : <SectionTitle>{categoryName}</SectionTitle>
       )}
 
       <View style={styles.grid}>
@@ -194,3 +209,5 @@ const styles = StyleSheet.create({
   },
   footerCount: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
 });
+
+const plain = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
