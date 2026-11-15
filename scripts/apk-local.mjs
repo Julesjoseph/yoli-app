@@ -1,7 +1,7 @@
 // Arma la APK en tu PC (sin EAS): npm run apk:local
 // Necesita Android Studio instalado (trae el SDK y Java).
 import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const win = process.platform === 'win32';
@@ -112,6 +112,40 @@ writeFileSync(join('android', 'local.properties'), `sdk.dir=${sdk.replace(/\\/g,
 try {
   execSync(win ? 'gradlew.bat --stop' : './gradlew --stop', { stdio: 'ignore', cwd: 'android', env });
 } catch {}
+
+// Lo que dejó la compilación anterior dentro de node_modules (librerías nativas como reanimated)
+// a veces queda trabado en Windows y Gradle no lo puede borrar: se borra aquí antes de empezar.
+const stale = [];
+const scan = (dir) => {
+  let names = [];
+  try { names = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const d of names) {
+    if (!d.isDirectory()) continue;
+    if (d.name.startsWith('@')) { scan(join(dir, d.name)); continue; }
+    for (const sub of ['build', '.cxx']) {
+      const target = join(dir, d.name, 'android', sub);
+      if (existsSync(target)) stale.push(target);
+    }
+  }
+};
+scan('node_modules');
+const locked = [];
+for (const dir of stale) {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 1000 });
+  } catch {
+    locked.push(dir);
+  }
+}
+if (locked.length) {
+  console.error(
+    '\nHay archivos de la compilación anterior trabados por otro programa:\n' +
+      locked.map((d) => `  - ${d}`).join('\n') +
+      '\nCierra Android Studio (si está abierto) y vuelve a correr: npm run apk:local\n' +
+      'Si sigue igual, reinicia la PC y córrelo otra vez.\n',
+  );
+  process.exit(1);
+}
 
 console.log('\n2/3 Compilando la APK (la primera vez tarda 10-20 minutos)…');
 // Solo los procesadores de celulares y tablets reales (no emuladores): compila en la mitad del tiempo.
