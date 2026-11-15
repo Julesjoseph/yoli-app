@@ -1,12 +1,13 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { EXPENSE_ICONS } from '@/components/brand-icons';
 import { Button, Card, Divider, EmptyState, Icon, IconBadge, Label, Pill, Row, Screen, SectionTitle } from '@/components/ui';
 import { VoidBox } from '@/components/void-box';
-import { getExpense, markExpensePaid, voidExpense } from '@/db/accounting';
+import { getExpense, markExpensePaid, removeInvoiceLine, voidExpense, type InvoiceStockLine } from '@/db/accounting';
+import { confirmAction } from '@/lib/confirm';
 import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { categoryLabel } from '@/lib/accounting';
@@ -21,10 +22,30 @@ export default function ExpenseScreen() {
   const db = useSQLiteContext();
   const ctx = useBusiness();
   const t = useTheme();
-  const [e, reload] = useFocusData(() => getExpense(db, id), [db, id]);
+  const [e, reload] = useFocusData(() => getExpense(db, ctx, id), [db, ctx, id]);
   const [msg, setMsg] = useState<{ text: string; ok?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const manager = canManage(ctx);
+
+  function removeLine(line: InvoiceStockLine) {
+    confirmAction(
+      `¿Quitar "${line.name}" del inventario?`,
+      `Sale lo que entró con esta factura (${Math.round((line.bought - line.removed) * 100) / 100} ${line.unit}). El gasto no cambia.`,
+      'Quitar',
+      async () => {
+        setBusy(true);
+        setMsg(null);
+        try {
+          await removeInvoiceLine(db, ctx, id, line);
+          setMsg({ text: `Listo: ${line.name} salió del inventario.`, ok: true });
+          reload();
+        } catch (err) {
+          setMsg({ text: err instanceof Error ? err.message : String(err) });
+        }
+        setBusy(false);
+      },
+    );
+  }
 
   if (e === null) {
     return (
@@ -83,14 +104,35 @@ export default function ExpenseScreen() {
       {e.stock.length ? (
         <>
           <SectionTitle icon="package-variant-closed">Lo que entró al inventario</SectionTitle>
-          <Card style={{ gap: 6 }}>
-            {e.stock.map((s) => (
-              <Row key={s.name}>
-                <Label size={15} style={{ flex: 1 }}>{s.name}</Label>
-                <Label bold size={15}>{Math.round(s.quantity * 100) / 100} {s.unit}</Label>
-              </Row>
-            ))}
-            {voided ? <Label muted size={12}>Al anular el gasto, esto salió del inventario.</Label> : null}
+          <Card style={{ gap: 10 }}>
+            {e.stock.map((s, i) => {
+              const left = Math.round((s.bought - s.removed) * 100) / 100;
+              const q = (n: number) => `${Math.round(n * 100) / 100} ${s.unit}`;
+              return (
+                <View key={`${s.ingredient_id}${s.location_id}`} style={{ gap: 4, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderColor: t.border, paddingTop: i ? 8 : 0 }}>
+                  <Row>
+                    <Label size={15} style={{ flex: 1, textDecorationLine: left <= 0 ? 'line-through' : 'none' }} muted={left <= 0}>{s.name}</Label>
+                    <Label bold size={15} muted={left <= 0}>{q(s.bought)}</Label>
+                  </Row>
+                  {s.removed > 0 ? <Label muted size={12}>Quitado del inventario: {q(s.removed)} (no era de la producción)</Label> : null}
+                  {!voided && manager && left > 0 ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon="package-variant-remove"
+                      title="Quitar del inventario (no es de la producción)"
+                      disabled={busy}
+                      onPress={() => removeLine(s)}
+                    />
+                  ) : null}
+                </View>
+              );
+            })}
+            <Label muted size={12}>
+              {voided
+                ? 'Al anular el gasto, esto salió del inventario.'
+                : 'Quitar un producto no cambia el monto del gasto (ese dinero sí se gastó). Si además el insumo no lo usas, elimínalo en Inventario.'}
+            </Label>
           </Card>
         </>
       ) : null}
@@ -132,7 +174,7 @@ export default function ExpenseScreen() {
         <VoidBox
           what="este gasto"
           reasons={['Se registró dos veces', 'Monto equivocado', 'No era de este negocio']}
-          warning={e.stock.length ? 'Lo que entró al inventario con esta factura va a salir.' : undefined}
+          warning={e.stock.some((x) => x.bought - x.removed > 0) ? 'Lo que entró al inventario con esta factura va a salir.' : undefined}
           onVoid={async (reason) => {
             await voidExpense(db, ctx, e.id, reason);
             setMsg({ text: 'Gasto anulado. Quedó en la auditoría.', ok: true });

@@ -117,11 +117,14 @@ begin
     new.voided_by := auth.uid();
     insert into audit_log (business_id, location_id, table_name, record_id, action, reason, amount, snapshot, user_id, user_name)
     values (new.business_id, new.location_id, 'expenses', new.id, 'anular', new.void_reason, new.amount, to_jsonb(old), auth.uid(), audit_name());
-    -- Lo que entró al inventario con esta factura (escaneada) vuelve a salir.
+    -- Lo que entró al inventario con esta factura (escaneada) y sigue ahí vuelve a salir
+    -- (lo que ya se quitó a mano no se vuelve a sacar).
     insert into inventory_movements (id, business_id, location_id, ingredient_id, quantity, reason, note, created_by)
-    select gen_random_uuid(), m.business_id, m.location_id, m.ingredient_id, -m.quantity, 'ajuste', 'Anulación de gasto ' || left(new.id::text, 8), auth.uid()
+    select gen_random_uuid(), new.business_id, m.location_id, m.ingredient_id, -sum(m.quantity), 'ajuste', 'Anulación de gasto ' || left(new.id::text, 8), auth.uid()
       from inventory_movements m
-     where m.business_id = new.business_id and m.reason = 'compra' and m.note like '%gasto ' || left(new.id::text, 8);
+     where m.business_id = new.business_id and m.note like '%gasto ' || left(new.id::text, 8)
+     group by m.location_id, m.ingredient_id
+    having sum(m.quantity) <> 0;
   end if;
   -- Pagar una cuenta por pagar también queda anotado.
   if new.paid and not old.paid and not new.voided then

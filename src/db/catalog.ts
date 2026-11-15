@@ -146,6 +146,30 @@ export async function saveIngredient(
   return row.id;
 }
 
+/** Cuántas recetas usan este insumo (para avisar antes de eliminarlo). */
+export async function ingredientUsage(db: SQLiteDatabase, id: string) {
+  const r = await db.getAllAsync<{ name: string }>(
+    'SELECT p.name FROM recipe_items r JOIN products p ON p.id = r.product_id WHERE r.ingredient_id = ? ORDER BY p.name',
+    [id],
+  );
+  return r.map((x) => x.name);
+}
+
+/**
+ * Elimina un insumo que no es de la producción (por ejemplo, uno que se creó de una factura
+ * y no se usa). Se quita de las recetas y se borran sus movimientos de inventario.
+ * El gasto de la factura no cambia (ese dinero sí se gastó). Necesita internet.
+ */
+export async function deleteIngredient(db: SQLiteDatabase, ctx: Context, id: string) {
+  await cloud(ctx, () => supabase!.from('ingredients').delete().eq('id', id));
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM recipe_items WHERE ingredient_id = ?', [id]);
+    await db.runAsync('DELETE FROM inventory_movements WHERE ingredient_id = ?', [id]);
+    await db.runAsync("DELETE FROM outbox WHERE table_name = 'inventory_movements' AND json_extract(payload, '$.ingredient_id') = ?", [id]);
+    await db.runAsync('DELETE FROM ingredients WHERE id = ?', [id]);
+  });
+}
+
 export async function saveProduct(
   db: SQLiteDatabase,
   ctx: Context,

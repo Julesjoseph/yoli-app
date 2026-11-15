@@ -51,6 +51,18 @@ export async function pushOutbox(db: SQLiteDatabase): Promise<SyncResult> {
       byId.set(key, { ...byId.get(key), ...row });
     });
     const { error } = await supabase.from(table).upsert([...byId.values()], { defaultToNull: false });
+    if (error && table === 'inventory_movements' && (error.code === '23503' || /foreign key/i.test(error.message))) {
+      // Un insumo que se eliminó: sus movimientos pendientes ya no tienen a dónde ir, se descartan.
+      const ids = [...new Set([...byId.values()].map((r) => r.ingredient_id as string))];
+      const { data: alive } = await supabase.from('ingredients').select('id').in('id', ids);
+      const keep = new Set((alive ?? []).map((r) => r.id as string));
+      const gone = group.filter((r) => !keep.has((JSON.parse(r.payload) as { ingredient_id: string }).ingredient_id));
+      if (gone.length) {
+        await db.runAsync(`DELETE FROM outbox WHERE seq IN (${gone.map(() => '?').join(',')})`, gone.map((r) => r.seq));
+        notifyLocalChange();
+        continue;
+      }
+    }
     if (error) {
       await db.runAsync(
         `UPDATE outbox SET attempts = attempts + 1, last_error = ? WHERE seq IN (${group.map(() => '?').join(',')})`,

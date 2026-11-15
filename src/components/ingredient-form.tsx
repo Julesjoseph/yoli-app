@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { Button, Card, Chips, Field, Icon, Label, Row } from '@/components/ui';
-import { saveIngredient, type CatalogIngredient } from '@/db/catalog';
+import { deleteIngredient, ingredientUsage, saveIngredient, type CatalogIngredient } from '@/db/catalog';
+import { confirmAction } from '@/lib/confirm';
 import { addStock } from '@/db/repo';
 import { useBusiness } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
@@ -20,10 +21,13 @@ export function IngredientForm({
   initial,
   onSaved,
   onCancel,
+  onDeleted,
 }: {
   initial: Partial<CatalogIngredient>;
   onSaved: (id: string) => void;
   onCancel: () => void;
+  /** Se llama después de eliminar el insumo. */
+  onDeleted?: () => void;
 }) {
   const db = useSQLiteContext();
   const ctx = useBusiness();
@@ -123,6 +127,45 @@ export function IngredientForm({
       ) : null}
       {msg ? <Label color={t.danger} size={14}>{msg}</Label> : null}
       <Button icon="content-save" title={saving ? 'Guardando…' : 'Guardar insumo'} onPress={save} disabled={saving || !name.trim()} />
+      {!isNew && onDeleted ? (
+        <Button
+          variant="danger"
+          icon="delete-outline"
+          title="Eliminar insumo (no es de la producción)"
+          disabled={saving}
+          onPress={() => askDelete(db, ctx, initial.id!, initial.name ?? name, setSaving, setMsg, onDeleted)}
+        />
+      ) : null}
     </Card>
   );
+}
+
+/** Pide confirmación (avisando en qué recetas se usa) y elimina el insumo. */
+export async function askDelete(
+  db: Parameters<typeof deleteIngredient>[0],
+  ctx: Parameters<typeof deleteIngredient>[1],
+  id: string,
+  name: string,
+  setBusy: (b: boolean) => void,
+  setMsg: (m: string) => void,
+  onDeleted: () => void,
+) {
+  const used = await ingredientUsage(db, id);
+  const text = [
+    used.length ? `Se usa en ${used.length === 1 ? 'la receta de' : 'las recetas de'}: ${used.slice(0, 5).join(', ')}${used.length > 5 ? '…' : ''}. Se quitará de ahí.` : '',
+    'Se borra del inventario con sus entradas y salidas. Los gastos de las facturas no cambian.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  confirmAction(`¿Eliminar "${name}"?`, text, 'Eliminar', async () => {
+    setBusy(true);
+    setMsg('');
+    try {
+      await deleteIngredient(db, ctx, id);
+      onDeleted();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    }
+    setBusy(false);
+  });
 }

@@ -11,6 +11,7 @@ import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD, parseAmount } from '@/lib/calc';
 import { unitName } from '@/lib/units';
+import { askDelete } from '@/components/ingredient-form';
 
 type Reason = 'compra' | 'merma' | 'ajuste';
 
@@ -25,6 +26,8 @@ export default function InventoryScreen() {
   const [qty, setQty] = useState('');
   const [reason, setReason] = useState<Reason>('compra');
   const [filter, setFilter] = useState<'todos' | 'bajos'>('todos');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
 
   const rows = stock ?? [];
   const low = rows.filter((s) => s.quantity <= s.min_stock);
@@ -75,7 +78,22 @@ export default function InventoryScreen() {
             onChange={setReason}
           />
           <Field label={`Cantidad (${unitName(editing.unit)})`} icon="scale-balance" keyboardType="decimal-pad" value={qty} onChangeText={setQty} autoFocus />
-          <Button icon="content-save" title="Guardar movimiento" onPress={save} />
+          <Button icon="content-save" title="Guardar movimiento" onPress={save} disabled={busy} />
+          {canManage(ctx) ? (
+            <Button
+              variant="ghost"
+              icon="delete-outline"
+              title="Eliminar este insumo (no es de la producción)"
+              disabled={busy}
+              onPress={() =>
+                askDelete(db, ctx, editing.id, editing.name, setBusy, setMsg, () => {
+                  setEditing(null);
+                  reload();
+                })
+              }
+            />
+          ) : null}
+          {msg ? <Label size={14} color={t.danger}>{msg}</Label> : null}
         </Card>
       ) : null}
 

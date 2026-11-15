@@ -1,3 +1,4 @@
+import { randomUUID } from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import {
@@ -115,22 +116,100 @@ export type Accounting = Awaited<ReturnType<typeof loadAccounting>>;
 
 export const expenseRef = (id: string) => `gasto ${id.slice(0, 8)}`;
 
-export async function getExpense(db: SQLiteDatabase, id: string) {
+export interface InvoiceStockLine {
+  ingredient_id: string;
+  location_id: string;
+  name: string;
+  unit: string;
+  /** Lo que entró con la factura. */
+  bought: number;
+  /** Lo que se quitó a mano (no era de la producción). */
+  removed: number;
+}
+
+type MoveRow = { ingredient_id: string; location_id: string; quantity: number; reason: string; note: string | null };
+
+/** Movimientos de inventario de una factura escaneada: de la nube si hay internet (el equipo solo guarda saldos). */
+async function invoiceMoves(db: SQLiteDatabase, ctx: Context, id: string): Promise<MoveRow[]> {
+  const like = `%${expenseRef(id)}`;
+  const local = await db.getAllAsync<MoveRow>(
+    'SELECT ingredient_id, location_id, quantity, reason, note FROM inventory_movements WHERE note LIKE ?',
+    [like],
+  );
+  if (ctx.demo || !supabase) return local;
+  const { data, error } = await supabase
+    .from('inventory_movements')
+    .select('id, ingredient_id, location_id, quantity, reason, note')
+    .eq('business_id', ctx.businessId)
+    .like('note', like);
+  if (error) return local;
+  // Lo de la nube más lo que este equipo todavía no ha subido.
+  const pending = await db.getAllAsync<{ payload: string }>("SELECT payload FROM outbox WHERE table_name = 'inventory_movements'");
+  const cloudIds = new Set((data ?? []).map((m) => m.id as string));
+  const extra = pending
+    .map((p) => JSON.parse(p.payload) as MoveRow & { id: string })
+    .filter((m) => (m.note ?? '').endsWith(expenseRef(id)) && !cloudIds.has(m.id));
+  return [...(data ?? []).map((m) => ({ ...(m as MoveRow), quantity: Number(m.quantity) })), ...extra];
+}
+
+export async function getInvoiceStock(db: SQLiteDatabase, ctx: Context, id: string): Promise<InvoiceStockLine[]> {
+  const moves = await invoiceMoves(db, ctx, id);
+  const names = new Map(
+    (await db.getAllAsync<{ id: string; name: string; unit: string }>('SELECT id, name, unit FROM ingredients')).map((i) => [i.id, i]),
+  );
+  const lines = new Map<string, InvoiceStockLine>();
+  for (const m of moves) {
+    const key = `${m.ingredient_id}|${m.location_id}`;
+    const ing = names.get(m.ingredient_id);
+    if (!ing) continue; // insumo eliminado
+    const l = lines.get(key) ?? { ingredient_id: m.ingredient_id, location_id: m.location_id, name: ing.name, unit: ing.unit, bought: 0, removed: 0 };
+    if (m.reason === 'compra') l.bought += m.quantity;
+    else if ((m.note ?? '').startsWith('Quitado')) l.removed += -m.quantity;
+    lines.set(key, l);
+  }
+  return [...lines.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getExpense(db: SQLiteDatabase, ctx: Context, id: string) {
   const e = await db.getFirstAsync<Expense & { location_id: string | null }>(`SELECT ${EXPENSE_SELECT}, location_id FROM expenses WHERE id = ?`, [id]);
   if (!e) return null;
   // Lo que entró al inventario con esta factura (si se escaneó).
-  const stock = await db.getAllAsync<{ name: string; unit: string; quantity: number }>(
-    `SELECT i.name, i.unit, SUM(m.quantity) AS quantity
-       FROM inventory_movements m JOIN ingredients i ON i.id = m.ingredient_id
-      WHERE m.reason = 'compra' AND m.note LIKE ?
-      GROUP BY i.id ORDER BY i.name`,
-    [`%${expenseRef(id)}`],
-  );
+  const stock = await getInvoiceStock(db, ctx, id);
   const pending = await db.getFirstAsync<{ n: number }>(
     "SELECT COUNT(*) AS n FROM outbox WHERE table_name = 'expenses' AND json_extract(payload, '$.id') = ?",
     [id],
   );
   return { ...e, stock, synced: !pending?.n };
+}
+
+/**
+ * Quita del inventario un producto que entró con una factura pero no es de la producción
+ * (por ejemplo, detergente o algo personal). El gasto no cambia: ese dinero sí se gastó.
+ */
+export async function removeInvoiceLine(db: SQLiteDatabase, ctx: Context, expenseId: string, line: InvoiceStockLine) {
+  const left = Math.round((line.bought - line.removed) * 10000) / 10000;
+  if (left <= 0) return;
+  const now = new Date().toISOString();
+  const mv = {
+    id: randomUUID(),
+    business_id: ctx.businessId,
+    location_id: line.location_id,
+    ingredient_id: line.ingredient_id,
+    quantity: -left,
+    reason: 'ajuste',
+    order_id: null,
+    note: `Quitado de ${expenseRef(expenseId)}`,
+    created_at: now,
+  };
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO inventory_movements (id, business_id, location_id, ingredient_id, quantity, reason, order_id, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [mv.id, mv.business_id, mv.location_id, mv.ingredient_id, mv.quantity, mv.reason, mv.order_id, mv.note, mv.created_at],
+    );
+    await enqueue(db, 'inventory_movements', mv, ctx);
+  });
+  if (!ctx.demo) await pushOutbox(db).catch(() => undefined);
 }
 
 async function expenseRow(db: SQLiteDatabase, id: string) {
@@ -148,20 +227,19 @@ export async function voidExpense(db: SQLiteDatabase, ctx: Context, id: string, 
   if (why.length < 3) throw new Error('Escribe el motivo (por ejemplo: "Se registró dos veces").');
   const row = await expenseRow(db, id);
   if (!ctx.demo) await requireSynced(db, 'expenses', id);
+  const stock = await getInvoiceStock(db, ctx, id);
   const now = new Date().toISOString();
   await db.withTransactionAsync(async () => {
     await db.runAsync('UPDATE expenses SET voided = 1, void_reason = ?, voided_at = ? WHERE id = ?', [why, now, id]);
     // Lo que entró al inventario con esta factura sale (en la nube lo hace la base de datos;
     // aquí solo se muestra hasta la próxima sincronización).
-    const moves = await db.getAllAsync<{ ingredient_id: string; quantity: number; location_id: string }>(
-      "SELECT ingredient_id, quantity, location_id FROM inventory_movements WHERE reason = 'compra' AND note LIKE ?",
-      [`%${expenseRef(id)}`],
-    );
-    for (const m of moves) {
+    for (const m of stock) {
+      const left = m.bought - m.removed;
+      if (Math.abs(left) < 0.0001) continue;
       await db.runAsync(
         `INSERT OR REPLACE INTO inventory_movements (id, business_id, location_id, ingredient_id, quantity, reason, note, created_at)
          VALUES (?, ?, ?, ?, ?, 'ajuste', ?, ?)`,
-        [`anula-${id}-${m.ingredient_id}`, ctx.businessId, m.location_id, m.ingredient_id, -m.quantity, `Anulación de ${expenseRef(id)}`, now],
+        [`anula-${id}-${m.ingredient_id}`, ctx.businessId, m.location_id, m.ingredient_id, -left, `Anulación de ${expenseRef(id)}`, now],
       );
     }
     // Sin "created_by": así no cambia quién lo registró.

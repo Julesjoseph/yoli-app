@@ -17,6 +17,9 @@ begin
     values (gen_random_uuid(), biz, loc, ing, -2, 'venta', o);
   insert into inventory_movements (id, business_id, location_id, ingredient_id, quantity, reason, note)
     values (gen_random_uuid(), biz, loc, ing, 10, 'compra', 'Distribuidora X · gasto ' || left(e::text, 8));
+  -- Una parte se quitó a mano (no era de la producción)
+  insert into inventory_movements (id, business_id, location_id, ingredient_id, quantity, reason, note)
+    values (gen_random_uuid(), biz, loc, ing, -4, 'ajuste', 'Quitado de gasto ' || left(e::text, 8));
   insert into expenses (id, business_id, location_id, category, amount, paid, supplier_name, due_date)
     values (e, biz, loc, 'insumos', 500, false, 'Distribuidora X', current_date + 15);
 

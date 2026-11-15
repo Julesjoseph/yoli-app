@@ -173,6 +173,10 @@ function Ingredients({ ingredients, onSaved }: { ingredients: CatalogIngredient[
             setEditing(null);
             onSaved();
           }}
+          onDeleted={() => {
+            setEditing(null);
+            onSaved();
+          }}
         />
       ) : (
         <Button icon="plus" title="Nuevo insumo" onPress={() => setEditing({})} />
