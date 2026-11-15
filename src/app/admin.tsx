@@ -143,8 +143,8 @@ export default function AdminScreen() {
           </Row>
           <Label size={14}>
             {demo.access === 'suspendido'
-              ? 'Nadie puede entrar al demo. Al tocar “Probar demo” verán que no está disponible.'
-              : 'Cualquiera puede probar YOLI con el negocio de ejemplo.'}
+              ? 'El botón “Probar demo” ya no aparece en la pantalla de entrada y nadie puede entrar al demo.'
+              : 'El botón “Probar demo” aparece en la pantalla de entrada: cualquiera puede probar YOLI con el negocio de ejemplo.'}
           </Label>
           {demo.access === 'suspendido' ? (
             <Button size="sm" icon="play" title="Activar demo" onPress={() => setSub(demo, 'activo', null, 'demo activado')} />
@@ -154,7 +154,7 @@ export default function AdminScreen() {
               variant="danger"
               icon="pause"
               title="Desactivar demo"
-              onPress={() => confirm('Desactivar demo', 'Nadie podrá entrar al demo hasta que lo actives otra vez.', () => setSub(demo, 'suspendido', null, 'demo desactivado'))}
+              onPress={() => confirm('Desactivar demo', 'El botón “Probar demo” desaparece de la pantalla de entrada hasta que lo actives otra vez.', () => setSub(demo, 'suspendido', null, 'demo desactivado'))}
             />
           )}
         </Card>

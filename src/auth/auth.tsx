@@ -18,7 +18,10 @@ interface AuthState {
   loading: boolean;
   session: Session | null;
   signIn(email: string, password: string): Promise<string | null>;
-  signUp(name: string, email: string, password: string): Promise<string | null>;
+  /** Crea la cuenta. confirm = hay que activarla desde el correo. */
+  signUp(name: string, email: string, password: string): Promise<{ error: string | null; confirm: boolean }>;
+  /** Vuelve a enviar el correo para activar la cuenta. */
+  resendConfirmation(email: string): Promise<string | null>;
   signOut(): Promise<void>;
   /** Entrar con la cuenta de Google (hay que activarlo en Supabase). */
   signInWithGoogle(): Promise<string | null>;
@@ -36,6 +39,7 @@ const traducir = (msg: string) => {
   if (/invalid login credentials/i.test(msg)) return 'Correo o contraseña incorrectos.';
   if (/email not confirmed/i.test(msg)) return 'Confirma tu correo antes de entrar (revisa tu bandeja de entrada).';
   if (/already registered/i.test(msg)) return 'Ya existe una cuenta con ese correo.';
+  if (/email.*(invalid|not valid)|invalid.*email|unable to validate email/i.test(msg)) return 'Ese correo no es válido. Revísalo.';
   if (/password should be at least/i.test(msg)) return 'La contraseña debe tener al menos 6 caracteres.';
   if (/network|fetch/i.test(msg)) return 'Sin conexión a internet. Intenta de nuevo.';
   if (/provider is not enabled|unsupported provider/i.test(msg)) return 'El acceso con Google aún no está activado.';
@@ -89,15 +93,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return error ? traducir(error.message) : null;
     },
     async signUp(name, email, password) {
-      if (!supabase) return null;
+      if (!supabase) return { error: null, confirm: false };
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password,
         options: { data: { name: name.trim() } },
       });
-      if (error) return traducir(error.message);
-      if (!data.session) return 'Cuenta creada. Revisa tu correo para confirmarla y luego entra.';
-      return null;
+      if (error) return { error: traducir(error.message), confirm: false };
+      // Supabase no da error si el correo ya tiene cuenta: devuelve un usuario sin identidades.
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        return { error: 'Ya existe una cuenta con ese correo. Entra con tu contraseña o usa «¿Olvidaste tu contraseña?».', confirm: false };
+      }
+      return { error: null, confirm: !data.session };
+    },
+    async resendConfirmation(email) {
+      if (!supabase) return null;
+      const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase() });
+      return error ? traducir(error.message) : null;
     },
     async signOut() {
       await supabase?.auth.signOut();
