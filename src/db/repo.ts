@@ -378,7 +378,7 @@ export async function updateImportedNet(db: SQLiteDatabase, ctx: Context, orderI
   });
 }
 
-async function insertMovement(
+export async function insertMovement(
   db: SQLiteDatabase,
   ctx: Context,
   ingredientId: string,
@@ -428,7 +428,7 @@ export const listStock = (db: SQLiteDatabase, ctx: Context) =>
 export async function addExpense(
   db: SQLiteDatabase,
   ctx: Context,
-  input: { category: string; description?: string; amount: number; ncf?: string; supplierRnc?: string },
+  input: { category: string; description?: string; amount: number; ncf?: string; supplierRnc?: string; spentAt?: string | null },
 ) {
   const now = new Date();
   const exp = {
@@ -440,7 +440,7 @@ export async function addExpense(
     amount: input.amount,
     supplier_rnc: input.supplierRnc || null,
     ncf: input.ncf || null,
-    spent_at: localDate(now),
+    spent_at: input.spentAt || localDate(now),
     created_at: now.toISOString(),
   };
   await db.withTransactionAsync(async () => {
@@ -452,6 +452,7 @@ export async function addExpense(
     );
     await enqueue(db, 'expenses', exp, ctx);
   });
+  return exp;
 }
 
 export const listExpenses = (db: SQLiteDatabase, ctx: Context, limit = 50) =>

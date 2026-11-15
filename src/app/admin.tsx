@@ -67,7 +67,10 @@ export default function AdminScreen() {
   const [data, reload] = useFocusData(async () => {
     if (!supabase) return { clients: [] as Client[], error: 'Sin nube' };
     const { data, error } = await supabase.rpc('admin_businesses');
-    return { clients: (data ?? []) as Client[], error: error?.message ?? '' };
+    // Lecturas de facturas con IA (migración 0018). Sin ella, no se muestra.
+    const ai = await supabase.rpc('admin_ai_scans');
+    const scans = new Map(((ai.data ?? []) as { business_id: string; used: number; monthly_limit: number }[]).map((r) => [r.business_id, r]));
+    return { clients: (data ?? []) as Client[], error: error?.message ?? '', scans, scansReady: !ai.error };
   }, []);
 
   if (!isAdmin) {
@@ -198,6 +201,24 @@ export default function AdminScreen() {
             {c.locations} {c.locations === 1 ? 'local' : 'locales'} · {c.users} {c.users === 1 ? 'usuario' : 'usuarios'} · 30 días:{' '}
             {c.orders_30d} ventas, {formatRD(Number(c.sales_30d))} · última venta {day(c.last_sale)}
           </Label>
+          {data?.scansReady ? (
+            <View style={{ gap: 6 }}>
+              <Label size={13}>
+                Facturas con IA este mes: <Label bold size={13}>{Number(data.scans.get(c.id)?.used ?? 0)}</Label> de{' '}
+                {data.scans.get(c.id)?.monthly_limit ?? 0}
+              </Label>
+              <Chips
+                scroll
+                options={[0, 30, 100, 300].map((n) => ({ value: String(n), label: n ? `${n} al mes` : 'Sin IA' }))}
+                value={String(data.scans.get(c.id)?.monthly_limit ?? 0)}
+                onChange={async (v) => {
+                  const { error } = await supabase!.rpc('admin_set_ai_scans', { p_business: c.id, p_limit: Number(v) });
+                  setMsg(error ? `No se pudo: ${error.message}` : `${c.name}: ${Number(v) ? `${v} facturas con IA al mes` : 'sin IA'}.`);
+                  reload();
+                }}
+              />
+            </View>
+          ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             <Button
               size="sm"

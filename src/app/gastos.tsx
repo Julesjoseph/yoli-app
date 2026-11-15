@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
@@ -58,6 +59,8 @@ export default function ExpensesScreen() {
           {formatRD(monthTotal)}
         </Text>
       </HeroCard>
+
+      <Button size="lg" icon="line-scan" title="Escanear factura de compra" onPress={() => router.push('/escanear-factura')} />
 
       <Card style={{ gap: 14 }}>
         <SectionTitle icon="plus-circle">Nuevo gasto</SectionTitle>

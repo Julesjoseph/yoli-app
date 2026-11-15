@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
@@ -6,7 +7,7 @@ import { foodIcon } from '@/components/brand-icons';
 import { Button, Card, Chips, Field, Icon, IconBadge, Label, Pill, ProgressBar, Row, Screen, SectionTitle, Stat } from '@/components/ui';
 import { addStock, type StockRow } from '@/db/repo';
 import { listStock } from '@/db/repo';
-import { useBusiness, useFocusData } from '@/hooks/use-business';
+import { canManage, useBusiness, useFocusData } from '@/hooks/use-business';
 import { useTheme } from '@/hooks/use-theme';
 import { formatRD } from '@/lib/calc';
 import { unitName } from '@/lib/units';
@@ -46,6 +47,9 @@ export default function InventoryScreen() {
         <Stat icon="package-variant" label="Valor en almacén" value={formatRD(value)} color={t.info} />
         <Stat icon="alert-circle" label="Por agotarse" value={String(low.length)} color={low.length ? t.danger : t.success} />
       </View>
+      {canManage(ctx) ? (
+        <Button variant="secondary" icon="line-scan" title="Entrada por factura (escanear)" onPress={() => router.push('/escanear-factura')} />
+      ) : null}
 
       {editing ? (
         <Card style={{ borderColor: t.primary, borderWidth: 1.5 }}>
