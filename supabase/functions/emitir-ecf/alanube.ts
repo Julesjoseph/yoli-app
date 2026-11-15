@@ -29,7 +29,7 @@ export interface EcfInput {
   lines: EcfLine[];
   discount: number; // descuento de la orden (con ITBIS)
   tipLaw: number; // 10% de ley (va como línea exenta)
-  paymentMethod: string; // efectivo, tarjeta, transferencia, plataforma
+  paymentMethod: string; // efectivo, tarjeta, transferencia, credito, plataforma
   issuedOn: string; // AAAA-MM-DD
   companyId?: string | null; // compañía asociada en Alanube
 }
@@ -37,7 +37,8 @@ export interface EcfInput {
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 // Formas de pago de la DGII: 1 efectivo, 2 cheque/transferencia, 3 tarjeta, 8 otras.
-const PAYMENT: Record<string, number> = { efectivo: 1, transferencia: 2, tarjeta: 3, plataforma: 8 };
+// 4 = venta a crédito (la DGII la marca con tipo de pago 2).
+const PAYMENT: Record<string, number> = { efectivo: 1, transferencia: 2, tarjeta: 3, credito: 4, plataforma: 8 };
 
 function indicator(rate: number) {
   if (Math.abs(rate - 0.18) < 1e-6) return 1;
@@ -102,7 +103,7 @@ export function buildAlanubePayload(i: EcfInput) {
       encf: i.encf,
       ...(i.type === '31' && i.sequenceDue ? { sequenceDueDate: i.sequenceDue } : {}),
       taxAmountIndicator: 0,
-      paymentType: 1,
+      paymentType: i.paymentMethod === 'credito' ? 2 : 1,
       incomeType: 1,
       paymentFormsTable: [{ paymentMethod: PAYMENT[i.paymentMethod] ?? 8, paymentAmount: totalAmount }],
     },

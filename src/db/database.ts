@@ -9,7 +9,22 @@ import { loadDemoActivity } from './demo';
  * Las columnas tienen los mismos nombres que en Supabase para que la
  * sincronización envíe las filas tal cual.
  */
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
+
+const V7_TABLES = `
+    CREATE TABLE IF NOT EXISTS shopping_items (
+      id TEXT PRIMARY KEY, business_id TEXT NOT NULL, location_id TEXT, name TEXT NOT NULL, quantity TEXT, note TEXT,
+      done INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0, done_at TEXT, created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS customers (
+      id TEXT PRIMARY KEY, business_id TEXT NOT NULL, name TEXT NOT NULL, phone TEXT, rnc TEXT, note TEXT,
+      credit_limit REAL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS customer_payments (
+      id TEXT PRIMARY KEY, business_id TEXT NOT NULL, location_id TEXT, customer_id TEXT NOT NULL, amount REAL NOT NULL,
+      method TEXT NOT NULL, note TEXT, voided INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
+    );
+`;
 
 export async function migrate(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -44,6 +59,8 @@ export async function migrate(db: SQLiteDatabase) {
     );
       `);
     }
+    // v7: lista de compras y ventas a crédito
+    if (current < 7) await db.execAsync(`ALTER TABLE orders ADD COLUMN customer_id TEXT;${V7_TABLES}`);
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     return;
   }
@@ -91,7 +108,7 @@ export async function migrate(db: SQLiteDatabase) {
       external_ref TEXT, status TEXT NOT NULL DEFAULT 'pagada', subtotal REAL NOT NULL, itbis REAL NOT NULL,
       tip_law REAL NOT NULL DEFAULT 0, total REAL NOT NULL, platform_commission REAL NOT NULL DEFAULT 0,
       net_income REAL NOT NULL, payment_method TEXT, created_at TEXT NOT NULL,
-      discount REAL NOT NULL DEFAULT 0, cash_received REAL, change_given REAL
+      discount REAL NOT NULL DEFAULT 0, cash_received REAL, change_given REAL, customer_id TEXT
     );
     CREATE INDEX IF NOT EXISTS orders_by_date ON orders (location_id, created_at);
     CREATE TABLE IF NOT EXISTS order_items (
@@ -109,13 +126,14 @@ export async function migrate(db: SQLiteDatabase) {
       seq INTEGER PRIMARY KEY AUTOINCREMENT, table_name TEXT NOT NULL, payload TEXT NOT NULL,
       created_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT
     );
+    ${V7_TABLES}
   `);
 
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
 const DATA_TABLES = [
-  'order_items', 'orders', 'inventory_movements', 'expenses', 'combo_items', 'recipe_items', 'products',
+  'order_items', 'orders', 'customer_payments', 'customers', 'shopping_items', 'inventory_movements', 'expenses', 'combo_items', 'recipe_items', 'products',
   'categories', 'ingredients', 'platform_commissions', 'locations', 'outbox', 'app_settings',
 ];
 

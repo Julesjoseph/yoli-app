@@ -5,6 +5,8 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/text';
 
 import { CHANNEL_ICONS } from '@/components/brand-icons';
+import { CustomerPicker } from '@/components/customer-picker';
+import { getCustomer } from '@/db/credit';
 import { ProductImage } from '@/components/product-image';
 import { Button, Card, Chips, Divider, EmptyState, Field, Icon, Label, Row } from '@/components/ui';
 import { ChannelColors } from '@/constants/theme';
@@ -26,6 +28,7 @@ const PAYMENTS = [
   { value: 'efectivo' as PaymentMethod, label: 'Efectivo', icon: 'cash' as const },
   { value: 'tarjeta' as PaymentMethod, label: 'Tarjeta', icon: 'credit-card' as const },
   { value: 'transferencia' as PaymentMethod, label: 'Transferencia', icon: 'bank-transfer' as const },
+  { value: 'credito' as PaymentMethod, label: 'A crédito', icon: 'account-clock' as const },
 ];
 
 /** La orden en curso: líneas, canal, pago, totales y botón Cobrar. */
@@ -40,6 +43,7 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
   const cashMode = !isDelivery && cart.payment === 'efectivo';
   const received = cashMode ? Number(cart.cashReceived.replace(/,/g, '')) || 0 : 0;
   const short = received > 0 && received < cart.totals.total;
+  const credit = !isDelivery && cart.payment === 'credito';
 
   async function charge() {
     setSaving(true);
@@ -51,7 +55,9 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
         externalRef: cart.externalRef,
         discount: cart.totals.discount,
         cashReceived: received || null,
+        customerId: credit ? cart.customerId : null,
       });
+      const customer = credit && cart.customerId ? await getCustomer(db, cart.customerId) : null;
       cart.clear();
       onCharged?.();
       const shop = {
@@ -65,7 +71,8 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
         print();
       } else {
         const change = received ? `\nRecibido ${formatRD(received)} · Devuelta ${formatRD(received - totals.total)}` : '';
-        Alert.alert('✅ Venta registrada', `Total ${formatRD(totals.total)}${change}`, [
+        const debt = customer ? `\nA crédito: ${customer.name} ahora debe ${formatRD(customer.balance)}` : '';
+        Alert.alert('✅ Venta registrada', `Total ${formatRD(totals.total)}${change}${debt}`, [
           { text: 'Listo', style: 'cancel' },
           { text: 'Imprimir ticket', onPress: print },
         ]);
@@ -123,6 +130,7 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
           <>
             <Label bold size={16}>Forma de pago</Label>
             <Chips options={PAYMENTS} value={cart.payment} onChange={cart.setPayment} />
+            {credit ? <CustomerPicker value={cart.customerId} onChange={cart.setCustomerId} total={cart.totals.total} /> : null}
             <DiscountPicker />
           </>
         )}
@@ -149,9 +157,9 @@ export function OrderPanel({ onCharged, compact }: { onCharged?: () => void; com
       <Button
         size="lg"
         icon="check-circle"
-        title={saving ? 'Guardando…' : `Cobrar ${formatRD(cart.totals.total)}`}
+        title={saving ? 'Guardando…' : credit ? `Vender a crédito ${formatRD(cart.totals.total)}` : `Cobrar ${formatRD(cart.totals.total)}`}
         onPress={charge}
-        disabled={cart.lines.length === 0 || saving || short}
+        disabled={cart.lines.length === 0 || saving || short || (credit && !cart.customerId)}
       />
     </View>
   );

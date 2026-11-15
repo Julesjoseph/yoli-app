@@ -25,12 +25,13 @@ type Sale = {
 
 type Period = 'hoy' | 'ayer' | '7d' | '30d' | 'dia';
 type ChannelFilter = 'todos' | Channel;
-type PayFilter = 'todos' | 'efectivo' | 'tarjeta' | 'transferencia' | 'plataforma';
+type PayFilter = 'todos' | 'efectivo' | 'tarjeta' | 'transferencia' | 'credito' | 'plataforma';
 
 const PAY_LABELS: Record<string, string> = {
   efectivo: 'Efectivo',
   tarjeta: 'Tarjeta',
   transferencia: 'Transferencia',
+  credito: 'A crédito',
   plataforma: 'Plataforma',
 };
 

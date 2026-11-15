@@ -48,6 +48,8 @@ export default function HomeScreen() {
     { icon: 'book-open-variant', label: 'Catálogo', hint: 'Productos y precios', href: '/catalogo', color: t.info, show: manager },
     { icon: 'receipt-text-outline', label: 'Registrar gasto', hint: 'Compras y pagos', href: '/gastos', color: t.accent, show: manager },
     { icon: 'package-variant', label: 'Inventario', hint: 'Stock e insumos', href: '/inventario', color: t.success, show: true },
+    { icon: 'cart-variant', label: 'Lista de compras', hint: 'Lo que hay que comprar', href: '/compras', color: t.info, show: true },
+    { icon: 'account-cash', label: 'Ventas a crédito', hint: 'Quién debe y abonos', href: '/credito', color: t.danger, show: true },
   ];
   const visible = actions.filter((a) => a.show);
   const tileWidth = width >= 768 ? '23.5%' : '48%';

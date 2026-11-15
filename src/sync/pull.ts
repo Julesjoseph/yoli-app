@@ -62,6 +62,11 @@ export async function pullCatalog(db: SQLiteDatabase, businessId: string) {
   return { locations: locations.length, products: products.length };
 }
 
+const ORDER_COLUMNS = [
+  'id', 'business_id', 'location_id', 'channel', 'external_ref', 'status', 'subtotal', 'itbis', 'tip_law', 'total',
+  'platform_commission', 'net_income', 'payment_method', 'created_at', 'discount', 'cash_received', 'change_given', 'customer_id',
+];
+
 /**
  * Trae lo que se vendió/gastó en este local desde otros equipos (últimos 35 días,
  * suficiente para los reportes del mes) y el stock actual calculado en la nube.
@@ -93,10 +98,7 @@ export async function pullLocationActivity(db: SQLiteDatabase, businessId: strin
       'inventory_movements',
     ]);
 
-    await insertRows(db, 'orders', orders.map((o) => ({ ...o, discount: o.discount ?? 0 })), [
-      'id', 'business_id', 'location_id', 'channel', 'external_ref', 'status', 'subtotal', 'itbis', 'tip_law', 'total',
-      'platform_commission', 'net_income', 'payment_method', 'created_at', 'discount', 'cash_received', 'change_given',
-    ]);
+    await insertRows(db, 'orders', orders.map((o) => ({ ...o, discount: o.discount ?? 0 })), ORDER_COLUMNS);
     await insertRows(db, 'order_items', items, ['id', 'order_id', 'product_id', 'name', 'unit_price', 'quantity']);
     await insertRows(db, 'expenses', expenses, [
       'id', 'business_id', 'location_id', 'category', 'description', 'amount', 'supplier_rnc', 'ncf', 'spent_at', 'created_at',
@@ -110,5 +112,53 @@ export async function pullLocationActivity(db: SQLiteDatabase, businessId: strin
         [`saldo-${locationId}-${s.ingredient_id}`, businessId, locationId, s.ingredient_id as string, Number(s.quantity), now],
       );
     }
+  });
+  await pullCreditAndShopping(db, businessId, locationId).catch(() => undefined);
+}
+
+/**
+ * Clientes a crédito, sus abonos y todas sus ventas a crédito (de cualquier fecha y local,
+ * para que lo que debe cada cliente cuadre), y la lista de compras de este local.
+ * Si la nube aún no tiene la migración 0016, no hace nada.
+ */
+export async function pullCreditAndShopping(db: SQLiteDatabase, businessId: string, locationId: string) {
+  const byBusiness = (q: any) => q.eq('business_id', businessId);
+  const [customers, payments, shopping] = await Promise.all([
+    fetchAll('customers', byBusiness),
+    fetchAll('customer_payments', byBusiness),
+    fetchAll('shopping_items', (q) => q.eq('location_id', locationId).eq('deleted', false)),
+  ]);
+  const creditOrders = await fetchAll('orders', (q) => byBusiness(q).eq('payment_method', 'credito'));
+  const ids = creditOrders.map((o) => o.id as string);
+  const items: Row[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    items.push(...(await fetchAll('order_items', (q) => q.in('order_id', ids.slice(i, i + 200)))));
+  }
+
+  const pending = `(SELECT json_extract(payload, '$.id') FROM outbox WHERE table_name = ?)`;
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(`DELETE FROM customers WHERE id NOT IN ${pending}`, ['customers']);
+    await db.runAsync(`DELETE FROM customer_payments WHERE id NOT IN ${pending}`, ['customer_payments']);
+    await db.runAsync(`DELETE FROM shopping_items WHERE (location_id = ? OR location_id IS NULL) AND id NOT IN ${pending}`, [
+      locationId,
+      'shopping_items',
+    ]);
+    await insertRows(db, 'customers', customers, ['id', 'business_id', 'name', 'phone', 'rnc', 'note', 'credit_limit', 'active', 'created_at']);
+    await insertRows(db, 'customer_payments', payments, [
+      'id', 'business_id', 'location_id', 'customer_id', 'amount', 'method', 'note', 'voided', 'created_at',
+    ]);
+    await insertRows(db, 'shopping_items', shopping, [
+      'id', 'business_id', 'location_id', 'name', 'quantity', 'note', 'done', 'deleted', 'done_at', 'created_at',
+    ]);
+    // Las ventas a crédito que aún no subió este equipo no se pisan.
+    const local = new Set(
+      (await db.getAllAsync<{ id: string }>(`SELECT json_extract(payload, '$.id') AS id FROM outbox WHERE table_name = 'orders'`)).map((r) => r.id),
+    );
+    const fresh = creditOrders.filter((o) => !local.has(o.id as string));
+    await insertRows(db, 'orders', fresh.map((o) => ({ ...o, discount: o.discount ?? 0 })), ORDER_COLUMNS);
+    const freshIds = new Set(fresh.map((o) => o.id as string));
+    await insertRows(db, 'order_items', items.filter((i) => freshIds.has(i.order_id as string)), [
+      'id', 'order_id', 'product_id', 'name', 'unit_price', 'quantity',
+    ]);
   });
 }

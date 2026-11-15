@@ -1,4 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+
+import { getCustomer } from '@/db/credit';
 import { Platform } from 'react-native';
 
 import { getSetting, setSettings } from '@/db/database';
@@ -71,7 +73,12 @@ export async function getTicketOrder(db: SQLiteDatabase, orderId: string): Promi
     'SELECT name, unit_price, quantity FROM order_items WHERE order_id = ?',
     [orderId],
   );
-  return { ...o, items };
+  // Venta a crédito: el cliente y lo que debe ahora.
+  const credit = o.payment_method === 'credito'
+    ? await db.getFirstAsync<{ customer_id: string | null }>('SELECT customer_id FROM orders WHERE id = ?', [orderId])
+    : null;
+  const customer = credit?.customer_id ? await getCustomer(db, credit.customer_id) : null;
+  return { ...o, items, customer_name: customer?.name ?? null, customer_balance: customer?.balance ?? null };
 }
 
 /** Abre el diálogo de impresión del teléfono con el ticket de la orden. */

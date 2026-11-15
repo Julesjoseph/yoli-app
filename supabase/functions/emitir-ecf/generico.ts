@@ -9,11 +9,12 @@ import type { EcfInput } from './alanube.ts';
 
 const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-// Formas de pago de la DGII: 1 efectivo, 2 cheque/transferencia, 3 tarjeta, 8 otras.
+// Formas de pago de la DGII: 1 efectivo, 2 cheque/transferencia, 3 tarjeta, 4 venta a crédito, 8 otras.
 const PAY_FORMS: Record<string, { code: number; name: string }> = {
   efectivo: { code: 1, name: 'Efectivo' },
   transferencia: { code: 2, name: 'Cheque / Transferencia / Depósito' },
   tarjeta: { code: 3, name: 'Tarjeta de débito / crédito' },
+  credito: { code: 4, name: 'Venta a crédito' },
   plataforma: { code: 8, name: 'Otras formas de pago' },
 };
 
@@ -116,6 +117,7 @@ export function buildYoliPayload(i: EcfInput, meta: YoliEcfMeta) {
       propinaLegal: round(i.tipLaw),
       total,
     },
+    tipoPago: i.paymentMethod === 'credito' ? 2 : 1, // 1 contado, 2 crédito
     formaPago: { codigo: pay.code, nombre: pay.name, monto: total },
     referencia: { ventaId: meta.saleId, sistema: 'YOLI SOFT' },
   };

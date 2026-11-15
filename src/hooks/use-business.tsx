@@ -14,7 +14,7 @@ import { onLocalChange, pushOutbox } from '@/sync/sync';
 // Tablas que avisan al instante cuando cambian en la nube.
 const REALTIME_TABLES = [
   'orders', 'expenses', 'inventory_movements', 'products', 'categories', 'ingredients', 'recipe_items',
-  'platform_commissions', 'locations',
+  'platform_commissions', 'locations', 'shopping_items', 'customers', 'customer_payments',
 ];
 
 export type BusinessKind = 'comida_rapida' | 'comedor' | 'cafeteria' | 'mixto';

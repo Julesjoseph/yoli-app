@@ -42,6 +42,13 @@
           "photosPermission": "YOLI SOFT usa tus fotos para las imágenes de los productos.",
           "cameraPermission": "YOLI SOFT usa la cámara para tomar fotos de los productos."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#CC6600",
+          "icon": "./assets/images/android-icon-monochrome.png"
+        }
       ]
     ],
     "experiments": {

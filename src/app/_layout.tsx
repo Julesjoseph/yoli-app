@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from '@/auth/auth';
 import { migrate } from '@/db/database';
 import { BusinessProvider, useBusinessState } from '@/hooks/use-business';
 import { CartProvider } from '@/hooks/use-cart';
+import { ReminderListener } from '@/components/reminder-listener';
 import { ChooseLocationScreen } from '@/screens/choose-location';
 import { CreateBusinessScreen } from '@/screens/create-business';
 import { LoginScreen, NewPasswordScreen } from '@/screens/login';
@@ -37,6 +38,7 @@ function Gate() {
     case 'ready':
       return (
         <CartProvider>
+          <ReminderListener />
           <Stack screenOptions={{ headerShown: false }} />
         </CartProvider>
       );

@@ -81,6 +81,7 @@ Montos en RD$ con 2 decimales. Los precios de los artículos van **sin ITBIS** y
     "propinaLegal": 20,
     "total": 256
   },
+  "tipoPago": 1,
   "formaPago": { "codigo": 3, "nombre": "Tarjeta de débito / crédito", "monto": 256 },
   "referencia": { "ventaId": "1f0c…", "sistema": "YOLI SOFT" }
 }
@@ -89,7 +90,8 @@ Montos en RD$ con 2 decimales. Los precios de los artículos van **sin ITBIS** y
 - `tipoEcf`: `"32"` factura de consumo, `"31"` crédito fiscal.
 - `comprador`: solo en la 31: `{ "rncCedula": "101000001", "nombre": "Cliente SRL" }`.
 - `indicadorFacturacion` (DGII): 1 = ITBIS 18 %, 2 = ITBIS 16 %, 4 = exento.
-- `formaPago.codigo` (DGII): 1 efectivo, 2 cheque/transferencia, 3 tarjeta, 8 otras (PedidosYa, Uber Eats).
+- `tipoPago` (DGII): 1 contado, 2 crédito (venta fiada a un cliente).
+- `formaPago.codigo` (DGII): 1 efectivo, 2 cheque/transferencia, 3 tarjeta, 4 venta a crédito, 8 otras (PedidosYa, Uber Eats).
 - `descuento` de cada línea ya está restado en `montoSinItbis`.
 - La propina legal (10 %, solo consumo en el local) va como línea exenta.
 

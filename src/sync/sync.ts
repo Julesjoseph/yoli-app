@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 
 const BATCH = 100;
 // Orden de subida para respetar las llaves foráneas del servidor
-const TABLE_ORDER = ['orders', 'order_items', 'inventory_movements', 'expenses'];
+const TABLE_ORDER = ['customers', 'orders', 'order_items', 'inventory_movements', 'expenses', 'customer_payments', 'shopping_items'];
 
 // Aviso de "hay algo nuevo en este equipo" para subirlo al instante.
 const localListeners = new Set<() => void>();
@@ -31,10 +31,12 @@ export async function pushOutbox(db: SQLiteDatabase): Promise<SyncResult> {
   if (mode?.value === 'demo') return { pushed: 0, pending: await pending(), offlineMode: true };
 
   const rows = await db.getAllAsync<{ seq: number; table_name: string; payload: string }>(
-    'SELECT seq, table_name, payload FROM outbox ORDER BY seq LIMIT ?',
+    // Lo que ya falló varias veces va al final, para no tapar lo demás.
+    'SELECT seq, table_name, payload FROM outbox ORDER BY (attempts >= 3), seq LIMIT ?',
     [BATCH],
   );
   let pushed = 0;
+  let firstError: string | undefined;
   for (const table of TABLE_ORDER) {
     const group = rows.filter((r) => r.table_name === table);
     if (group.length === 0) continue;
@@ -46,7 +48,9 @@ export async function pushOutbox(db: SQLiteDatabase): Promise<SyncResult> {
         `UPDATE outbox SET attempts = attempts + 1, last_error = ? WHERE seq IN (${group.map(() => '?').join(',')})`,
         [error.message, ...group.map((r) => r.seq)],
       );
-      return { pushed, pending: await pending(), error: error.message };
+      // Una tabla con error (p. ej. la nube aún sin la migración nueva) no frena a las demás.
+      firstError ??= `${table}: ${error.message}`;
+      continue;
     }
     await db.runAsync(
       `DELETE FROM outbox WHERE seq IN (${group.map(() => '?').join(',')})`,
@@ -54,5 +58,5 @@ export async function pushOutbox(db: SQLiteDatabase): Promise<SyncResult> {
     );
     pushed += group.length;
   }
-  return { pushed, pending: await pending() };
+  return { pushed, pending: await pending(), ...(firstError ? { error: firstError } : {}) };
 }

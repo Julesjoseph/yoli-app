@@ -25,6 +25,9 @@ export interface TicketOrder {
   /** Efectivo que entregó el cliente y su devuelta (si se registró). */
   cash_received?: number | null;
   change_given?: number | null;
+  /** Venta a crédito: a quién y cuánto debe después de esta venta. */
+  customer_name?: string | null;
+  customer_balance?: number | null;
   created_at: string;
   items: { name: string; unit_price: number; quantity: number }[];
   /** Factura electrónica (e-CF) de esta venta, si se emitió. */
@@ -103,6 +106,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   tarjeta: 'Tarjeta',
   transferencia: 'Transferencia',
   plataforma: 'Pagado en la plataforma',
+  credito: 'A crédito',
 };
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -174,6 +178,8 @@ ${order.tip_law > 0 ? `<tr><td>Propina legal 10%</td><td class="r">${money(order
 <tr><td>Pago</td><td class="r">${esc(PAYMENT_LABELS[order.payment_method] ?? order.payment_method)}</td></tr>
 ${order.cash_received ? `<tr><td>Recibido</td><td class="r">${money(order.cash_received)}</td></tr>
 <tr><td class="b">Devuelta</td><td class="r b">${money(order.change_given ?? 0)}</td></tr>` : ''}
+${order.customer_name ? `<tr><td>Cliente</td><td class="r">${esc(order.customer_name)}</td></tr>
+${order.customer_balance != null ? `<tr><td class="b">Balance pendiente</td><td class="r b">${money(order.customer_balance)}</td></tr>` : ''}` : ''}
 </table>
 <hr>
 ${order.invoice ? `${qrBlock(ecfQrUrl(order.invoice, s.rnc, order.total))}

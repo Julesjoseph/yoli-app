@@ -51,7 +51,7 @@ export interface Expense {
   amount: number;
   spent_at: string;
 }
-export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'plataforma';
+export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'plataforma' | 'credito';
 
 /** Fecha local (AAAA-MM-DD), no UTC: en RD son 4 horas de diferencia. */
 export const localDate = (d: Date) =>
@@ -96,9 +96,9 @@ export async function getContext(db: SQLiteDatabase): Promise<Context | null> {
 }
 
 // Tablas de la nube que guardan quién hizo el registro
-const HAS_CREATED_BY = new Set(['orders', 'inventory_movements', 'expenses']);
+const HAS_CREATED_BY = new Set(['orders', 'inventory_movements', 'expenses', 'customer_payments', 'shopping_items']);
 
-async function enqueue(db: SQLiteDatabase, table: string, payload: object, ctx?: Context) {
+export async function enqueue(db: SQLiteDatabase, table: string, payload: object, ctx?: Context) {
   const body = ctx && !ctx.demo && HAS_CREATED_BY.has(table) ? { ...payload, created_by: ctx.userId } : payload;
   await db.runAsync('INSERT INTO outbox (table_name, payload, created_at) VALUES (?, ?, ?)', [
     table,
@@ -174,8 +174,11 @@ export async function recordSale(
     discount?: number;
     /** Efectivo que entregó el cliente (para calcular la devuelta). */
     cashReceived?: number | null;
+    /** Cliente al que se le vende a crédito (obligatorio si el pago es 'credito'). */
+    customerId?: string | null;
   },
 ) {
+  if (input.paymentMethod === 'credito' && !input.customerId) throw new Error('Elige el cliente de la venta a crédito.');
   const rates = await getCommissionRates(db, ctx.businessId);
   const totals = computeOrderTotals(
     input.lines.map((l) => ({ unitPrice: priceFor(l.product, input.channel), quantity: l.quantity, itbisRate: itbisFor(l.product, input.channel) })),
@@ -203,6 +206,7 @@ export async function recordSale(
     discount: totals.discount,
     cash_received: input.cashReceived ? round2(input.cashReceived) : null,
     change_given: input.cashReceived ? round2(Math.max(0, input.cashReceived - totals.total)) : null,
+    customer_id: input.paymentMethod === 'credito' ? input.customerId ?? null : null,
   };
   if (order.cash_received !== null && order.cash_received < totals.total) {
     throw new Error('El efectivo recibido es menor que el total.');
@@ -211,9 +215,9 @@ export async function recordSale(
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO orders (id, business_id, location_id, channel, external_ref, status, subtotal, itbis, tip_law,
-        total, platform_commission, net_income, payment_method, created_at, discount, cash_received, change_given)
+        total, platform_commission, net_income, payment_method, created_at, discount, cash_received, change_given, customer_id)
        VALUES ($id, $business_id, $location_id, $channel, $external_ref, $status, $subtotal, $itbis, $tip_law,
-        $total, $platform_commission, $net_income, $payment_method, $created_at, $discount, $cash_received, $change_given)`,
+        $total, $platform_commission, $net_income, $payment_method, $created_at, $discount, $cash_received, $change_given, $customer_id)`,
       Object.fromEntries(Object.entries(order).map(([k, v]) => ['$' + k, v])),
     );
     // El descuento solo se sube si hay uno (así sigue funcionando aunque la nube aún no tenga esa columna).
@@ -224,6 +228,7 @@ export async function recordSale(
       delete cloudOrder.cash_received;
       delete cloudOrder.change_given;
     }
+    if (!order.customer_id) delete cloudOrder.customer_id;
     await enqueue(db, 'orders', cloudOrder, ctx);
 
     for (const l of input.lines) {
